@@ -22,6 +22,8 @@
 ### Funcionalidades
   - Acesso a dados do prontuário eletrônico da Amplimed em tempo real
   - Upload de PDFs referentes a exames, medicações e casos do paciente
+  - Assistente de IA: É possível fazer perguntas à inteligência artificial e enviar arquivos com poucos cliques
+  - Histórico de interações: A aplicação salva o histórico de interações por paciente, que pode ser consultado posteriormente
 
 #### Backend
 
