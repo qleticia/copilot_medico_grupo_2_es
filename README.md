@@ -19,6 +19,10 @@
   - Node
   - React
 
+### Funcionalidades
+  - Acesso a dados do prontuário eletrônico da Amplimed em tempo real
+  - Upload de PDFs referentes a exames, medicações e casos do paciente
+
 #### Backend
 
 1. Instale as bibliotecas necessárias:
