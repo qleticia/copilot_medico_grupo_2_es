@@ -24,6 +24,8 @@
   - Upload de PDFs referentes a exames, medicações e casos do paciente
   - Assistente de IA: É possível fazer perguntas à inteligência artificial e enviar arquivos com poucos cliques
   - Histórico de interações: A aplicação salva o histórico de interações por paciente, que pode ser consultado posteriormente
+  - Anonimato: a IA filtra os dados removendo o nome do paciente
+  - Extrai as informações mais importantes dos exames
 
 #### Backend
 
