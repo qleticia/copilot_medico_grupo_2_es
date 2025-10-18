@@ -22,8 +22,7 @@ type PatientListItem = {
 type ConsultationListItem = {
   id: string;
   title: string;
-  date?: string; 
-  created_at: string;
+  date: string;
 };
 
 // --- Componente Principal App ---
@@ -105,17 +104,17 @@ function App() {
       const data = await response.json();
       if (data.status === 'success') {
         const sortedConsultations = data.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => 
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         setPatientConsultations(sortedConsultations);
       } else {
         console.error("Erro ao carregar consultas:", data.message);
     
-        setPatientConsultations([{ id: Date.now().toString(), title: `Erro ao carregar consultas: ${data.message}`, created_at: new Date().toISOString() }]);
+        setPatientConsultations([{ id: Date.now().toString(), title: `Erro ao carregar consultas: ${data.message}`, date: new Date().toISOString() }]);
       }
     } catch (error: any) {
       console.error("Erro na requisição de consultas:", error);
-      setPatientConsultations([{ id: Date.now().toString(), title: `Erro de rede ao carregar consultas: ${error.message}`, created_at: new Date().toISOString() }]);
+      setPatientConsultations([{ id: Date.now().toString(), title: `Erro de rede ao carregar consultas: ${error.message}`, date: new Date().toISOString() }]);
     } finally {
       setIsLoading(false);
     }
@@ -295,7 +294,7 @@ function App() {
 
       if (consultationsData.status === 'success' && consultationsData.consultations.length > 0) {
         const sortedConsults = consultationsData.consultations.sort((a: ConsultationListItem, b: ConsultationListItem) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            new Date(b.date).getTime() - new Date(a.date).getTime()
         );
         selectedConsultationToLoad = sortedConsults[0].id;
         selectedConsultationTitleToLoad = sortedConsults[0].title;
@@ -711,7 +710,7 @@ function App() {
                       <label htmlFor={`consultation-${consultation.id}`} style={{ flexGrow: 1, cursor: 'pointer' }}>
                         <strong>{consultation.title}</strong>
                         <br />
-                        <small>ID: {consultation.id.substring(0, 8)}... - Criada em: {new Date(consultation.created_at).toLocaleDateString('pt-BR')}</small>
+                        <small>ID: {consultation.id.substring(0, 8)}... - Criada em: {new Date(consultation.date).toLocaleDateString('pt-BR')}</small>
                       </label>
                     </div>
                   )
