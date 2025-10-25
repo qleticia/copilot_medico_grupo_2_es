@@ -5,6 +5,7 @@
 ## Requisitos
 
 ### Backend
+
 - **Tecnologias**:
   - Python (3.11.2)
   - Flask (3.0.3)
@@ -13,6 +14,7 @@
   - PyPDF2
 
 ### Frontend
+
 - **Tecnologias**:
   - JavaScript (v18.12.1)
   - Extensão Chrome ("manifest_version" : 3)
@@ -30,31 +32,33 @@
 #### Backend
 
 1. Instale as bibliotecas necessárias:
-  
-  ```bash
-  pip install google-generativeai Flask spacy PyPDF2
-  ```
 
-  ```bash
-  python -m spacy download       pt_core_news_lg
-  ```
+```bash
+pip install google-generativeai Flask spacy PyPDF2
+```
 
+```bash
+python -m spacy download       pt_core_news_lg
+```
 
 2. Gere uma chave API do gemini no site e criar uma nova váriavel de usuário com o nome ( GEMINI_API_KEY) e coloque-a a key no Valor da variável.
-   
+
 #### Frontend
 
 1. Navegue para o diretório `front/copmed-extension`:
+
    ```bash
    cd front/copmed-extension
    ```
 
 2. Instale as dependências do Node.js:
+
    ```bash
    npm install
    ```
 
 3. Compile o código para gerar a extensão:
+
    ```bash
    npm run build
    ```
@@ -68,12 +72,15 @@
 ### Passo a Passo para Carregar a Extensão no Modo Desenvolvedor
 
 1. Abra o Chrome e acesse a página de extensões:
+
    - No navegador, clique em **Menu (três pontos no canto superior direito) > Mais ferramentas > Extensões**, ou simplesmente acesse `chrome://extensions` na barra de endereço.
 
 2. Ative o **Modo Desenvolvedor**:
+
    - Na parte superior direita da página de extensões, ative o botão de **Modo desenvolvedor**.
 
 3. Carregue a extensão:
+
    - Clique no botão **Carregar sem compactação** (ou **Load unpacked**).
    - Navegue até o diretório `dist` gerado no passo anterior e selecione-o.
 
@@ -82,14 +89,23 @@
 
    Instalar Flask-Cors antes de iniciar o SERVER.PY
 
-    ```bash
+   ```bash
    pip install Flask-Cors
    ```
+
    ```bash
    python server.py
    ```
-   
-6. Teste a extensão:
+
+5. Teste a extensão:
    - A extensão deve aparecer na sua barra de ferramentas. Clique nela para começar a usar!
+
+# Executando com Docker
+
+1. Crie .env com GEMINI_API_KEY.
+2. Na raiz do projeto:
+   docker-compose up --build
+3. Backend disponível em http://localhost:3001
+4. Frontend (opcional) disponível em http://localhost:8080 (apenas para testar a build)
 
 ---
