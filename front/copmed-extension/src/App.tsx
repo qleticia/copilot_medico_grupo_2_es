@@ -608,7 +608,9 @@ function App() {
           onSendMessage={handleSendMessage} 
           onUploadPdf={handleUploadPdf} 
         />
-
+      </div>
+      
+      <div>
         {/* Debug Mode Toggle */}
         <div style={{ marginTop: '10px', textAlign: 'center' }}>
           <label>
@@ -620,7 +622,6 @@ function App() {
             Modo Debug
           </label>
         </div>
-
         {/* Debug Controls */}
         {debugMode && (
           <div style={{ borderTop: '1px solid #eee', marginTop: '10px', paddingTop: '10px' }}>
@@ -644,14 +645,11 @@ function App() {
         </button>
       </div>
 
+
       {/* Modal para Criar Novo Paciente */}
       {showNewPatientModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-          justifyContent: 'center', alignItems: 'center', zIndex: 1000
-        }}>
-          <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '8px', width: '300px' }}>
+        <div className='modal'>
+          <div className='new-patient-modal'>
             <h3>Criar Novo Paciente</h3>
             <input
               type="text"
@@ -661,7 +659,7 @@ function App() {
               style={{ width: 'calc(100% - 20px)', marginBottom: '10px', padding: '8px' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setShowNewPatientModal(false)} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#ccc' }}>
+              <button onClick={() => setShowNewPatientModal(false)} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#6b7280' }}>
                 Cancelar
               </button>
               <button onClick={handleCreateNewPatient} disabled={isLoading} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white' }}>
@@ -674,15 +672,8 @@ function App() {
 
       {/* Modal para seleção de históricos de consulta para importação */}
       {showImportHistoryModal && patientId && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
-          justifyContent: 'center', alignItems: 'center', zIndex: 1000
-        }}>
-          <div style={{
-            backgroundColor: 'white', padding: '20px', borderRadius: '8px',
-            width: '90%', maxWidth: '500px', maxHeight: '80vh', overflowY: 'auto'
-          }}>
+        <div className='modal'>
+          <div className='history-import-modal'>
             <h3 style={{ marginTop: '0' }}>Selecionar Históricos para Nova Consulta</h3>
             <p>Marque os históricos de consultas anteriores que você deseja importar para a nova conversa.</p>
             
@@ -724,7 +715,7 @@ function App() {
                   setSelectedConsultationIdsToImport([]); 
                   setShowImportHistoryModal(false); 
                 }}
-                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#ccc' }}
+                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#6b7280' }}
               >
                 Cancelar
               </button>

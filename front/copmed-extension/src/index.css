@@ -9,9 +9,6 @@
     padding: .75rem;
 }
 
-/* CORREÇÃO 1: Removido o :root do tema light que estava sobrescrevendo tudo */
-/* CORREÇÃO 2: Separado corretamente os estilos para cada tema */
-
 @media (prefers-color-scheme: dark) {
     /* TEMA ESCURO */
     :root {
@@ -23,21 +20,21 @@
         background-color: #4b4848; 
     }
     .chat-header {
-        background-color: #2d2d2d; /* CORREÇÃO: Alterado para cor escura */
+        background-color: #2d2d2d; 
     }
     .chat-title {
-        color: #ffffff; /* CORREÇÃO: Alterado para cor clara no tema escuro */
+        color: #ffffff;
     }
     .chat-messages {
-        background-color: #3a3a3a; /* CORREÇÃO: Adicionado fundo escuro */
+        background-color: #3a3a3a; 
         color: #ffffff;
     }
     .chat-message-user .chat-message {
-        background-color: #1e40af; /* CORREÇÃO: Azul mais escuro */
+        background-color: #1e40af;
         color: #fff;
     }
     .chat-message-bot .chat-message {
-        background-color: #4b5563; /* CORREÇÃO: Cinza escuro */
+        background-color: #4b5563; 
         color: #f3f4f6;
     }
     .chat-input {
@@ -59,6 +56,15 @@
     button {
         background-color: #353535;
     }
+    .new-patient-modal{
+        background-color: #2d2d2d;
+        color: #ffffff;
+    }
+
+    .history-import-modal{
+        background-color: #2d2d2d;
+        color: #ffffff;
+    }
 }
 
 @media (prefers-color-scheme: light) {
@@ -69,7 +75,7 @@
     }
     
     .chat-container {
-        background-color: #f8f9fa; /* CORREÇÃO: Alterado para cor clara */
+        background-color: #f8f9fa;
     }
     .chat-header {
         background-color: #fff;
@@ -105,23 +111,56 @@
         background-color: #2563eb;
     }
     
-    /* CORREÇÃO: Estilos de links e botões movidos para fora dos media queries */
     a:hover {
         color: #747bff;
     }
     button {
         background-color: #f9f9f9;
     }
+
+    .new-patient-modal{
+        background-color: #ffffff;
+        color: #213547;
+    }
+    .history-import-modal{
+        background-color: #ffffff;
+        color: #213547;
+    }
 }
 
-/* CORREÇÃO 3: Estilos gerais movidos PARA FORA dos media queries */
 /* Esses estilos são aplicados independentemente do tema */
+
+    .modal{
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0; 
+      bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+      display: flex;
+      justify-content: center; 
+      align-items: center;
+      z-index: 1000;
+    }
+
+    .new-patient-modal{
+      padding: 20px;
+      border-radius: 8px;
+      width: 300px;
+    }
+
+    .history-import-modal{
+      padding: 20px;
+      border-radius: 8px;
+      width: 90%;
+      max-Width: 500px;
+      max-Height: 80vh;
+      overflow-y: auto;
+    }
 
 .chat-container {
     display: flex;
     flex-direction: column;
-    height: 480px;
-    width: 320px;
     margin: 0 auto;
     padding: .75rem;
     border-radius: .5rem;
@@ -202,19 +241,17 @@
     justify-content: center;
 }
 
-/* CORREÇÃO 4: Estilos do :root movidos para fora e organizados */
 :root {
     font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
     line-height: 1.5;
     font-weight: 400;
-    color-scheme: light dark; /* IMPORTANTE: Habilita suporte de temas */
+    color-scheme: light dark; /* IMPORTANTE: Temas */
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
 }
 
-/* CORREÇÃO 5: Estilos gerais de elementos movidos para fora */
 a {
     font-weight: 500;
     color: #646cff;
@@ -259,52 +296,6 @@ button:focus-visible {
     outline: 4px auto -webkit-focus-ring-color;
 }
 
-
-/* ================================================= */
-/* CORREÇÃO PARA OS MODAIS - CORES DOS TEXTOS */
-/* ================================================= */
-
-/* Modal de criar paciente */
-div[style*="position: fixed"][style*="background-color: rgba(0, 0, 0, 0.5)"] {
-    background-color: rgba(0, 0, 0, 0.7) !important;
-}
-
-div[style*="background-color: white"][style*="border-radius: 8px"] {
-    background-color: #2d2d2d !important; /* Fundo escuro */
-    color: #ffffff !important; /* Texto branco */
-    border: 1px solid #444 !important;
-}
-
-/* Textos dentro do modal */
-div[style*="background-color: white"] h3,
-div[style*="background-color: white"] p,
-div[style*="background-color: white"] label,
-div[style*="background-color: white"] strong,
-div[style*="background-color: white"] small {
-    color: #ffffff !important; /* Força texto branco */
-}
-
-/* Inputs dentro do modal */
-div[style*="background-color: white"] input,
-div[style*="background-color: white"] select {
-    background-color: #374151 !important;
-    color: #ffffff !important;
-    border: 1px solid #4b5563 !important;
-}
-
-/* Botões dentro do modal */
-div[style*="background-color: white"] button {
-    background-color: #3b82f6 !important;
-    color: #ffffff !important;
-    border: 1px solid #2563eb !important;
-}
-
-div[style*="background-color: white"] button[style*="background-color: #ccc"] {
-    background-color: #6b7280 !important; /* Cinza para botão cancelar */
-    color: #ffffff !important;
-}
-
-/* CORREÇÃO PARA LINKS LONGS NAS MENSAGENS */
 .chat-message-text {
     word-wrap: break-word !important;
     overflow-wrap: break-word !important;
