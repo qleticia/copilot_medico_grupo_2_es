@@ -607,6 +607,950 @@
             "timestamp": "2025-07-05T10:18:13.069380"
           }
         ]
+      },
+      {
+        "id": "094d1234-e9b8-4a6a-a5f6-f7db3f40dedb",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-20T19:23:32.264313",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:32.263951"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:32.263963"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:32.263965"
+          }
+        ]
+      },
+      {
+        "id": "478f94bb-c741-4e3c-9bbd-18febadb2ae5",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-20T19:23:32.266492",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:32.266111"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:32.266117"
+          }
+        ]
+      },
+      {
+        "id": "8e8848bc-48d4-41e5-8c0d-5314cc67fe94",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-20T19:23:35.735287",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:35.734818"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:35.734829"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:35.734831"
+          }
+        ]
+      },
+      {
+        "id": "09cc9d86-175d-4bd1-929c-659651fcef07",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-20T19:23:35.737398",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:35.737020"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-20T19:23:35.737026"
+          }
+        ]
+      },
+      {
+        "id": "3bf3d3b9-84fb-4921-877f-bf623680022b",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-20T20:02:30.448389",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:30.447990"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:30.448001"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:30.448004"
+          }
+        ]
+      },
+      {
+        "id": "e3ae2166-a669-4699-9e8d-1fe129459ef6",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-20T20:02:30.450705",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:30.450238"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:30.450255"
+          }
+        ]
+      },
+      {
+        "id": "f1b252d2-64fe-460d-a8d9-932bf81a4014",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-20T20:02:34.008617",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:34.008229"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:34.008247"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:34.008249"
+          }
+        ]
+      },
+      {
+        "id": "029910be-8d87-43ed-b090-e6ba6f3b7833",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-20T20:02:34.010826",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:34.010443"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-20T20:02:34.010449"
+          }
+        ]
+      },
+      {
+        "id": "ce04bbe1-ea03-42ae-a659-a75f3ab52b1d",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-23T20:39:25.202383",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:25.201872"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:25.201884"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:25.201886"
+          }
+        ]
+      },
+      {
+        "id": "b36dd8f5-07ee-4d49-b579-005578724a17",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-23T20:39:25.205384",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:25.204725"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:25.204740"
+          }
+        ]
+      },
+      {
+        "id": "9f9fc163-955e-4c16-bda2-34ffc2707d77",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-23T20:39:27.806106",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:27.805675"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:27.805686"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:27.805688"
+          }
+        ]
+      },
+      {
+        "id": "f04eb917-7214-4256-9e37-bc6136a2c8ce",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-23T20:39:27.808663",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:27.808222"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:39:27.808229"
+          }
+        ]
+      },
+      {
+        "id": "8160b7c9-d143-4b8c-a95e-808ed99d90b3",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-23T20:41:19.154475",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:19.154012"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:19.154024"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:19.154026"
+          }
+        ]
+      },
+      {
+        "id": "fe2b58c9-3915-401c-b88d-e102ec0c7efd",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-23T20:41:19.157808",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:19.157283"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:19.157293"
+          }
+        ]
+      },
+      {
+        "id": "7766a609-a123-4753-bf3f-ef97aed96602",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-23T20:41:22.716824",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:22.716374"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:22.716384"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:22.716387"
+          }
+        ]
+      },
+      {
+        "id": "110cf096-9c78-4474-81fe-c0a6c9301f7b",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-23T20:41:22.719509",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:22.719040"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-23T20:41:22.719046"
+          }
+        ]
+      },
+      {
+        "id": "ee61c8d7-9d94-4d28-9177-75376a9bc1cf",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-25T11:03:06.142403",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:06.141933"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:06.141944"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:06.141946"
+          }
+        ]
+      },
+      {
+        "id": "d522ce0e-56cb-4ae2-81b1-22be2eec9692",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-25T11:03:06.145507",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:06.145037"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:06.145047"
+          }
+        ]
+      },
+      {
+        "id": "3568501d-11d9-4875-b4e3-00624d6e8941",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-25T11:03:08.486471",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:08.486022"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:08.486033"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:08.486036"
+          }
+        ]
+      },
+      {
+        "id": "a611b7fd-a816-41ea-93e4-06b57b0404a1",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-25T11:03:08.489194",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:08.488739"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-25T11:03:08.488745"
+          }
+        ]
+      },
+      {
+        "id": "7dcb948c-e0e1-4e5a-b232-00b548cbfa23",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-25T14:25:15.070569",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:15.069770"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:15.069798"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:15.069802"
+          }
+        ]
+      },
+      {
+        "id": "e6938149-7ae3-47b7-b0de-079184fdcdab",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-25T14:25:15.075444",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:15.074613"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:15.074624"
+          }
+        ]
+      },
+      {
+        "id": "523322ce-2a25-4ecd-8a4e-c1aaaca0a316",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-25T14:25:19.545678",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:19.544835"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:19.544852"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:19.544855"
+          }
+        ]
+      },
+      {
+        "id": "0916a59a-4db1-4d0f-9d11-22ab3ce77988",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-25T14:25:19.550830",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:19.549994"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-25T14:25:19.550006"
+          }
+        ]
+      },
+      {
+        "id": "b3722277-bfdf-40da-9503-6fd3cb4ae356",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-27T19:32:19.532581",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:19.532044"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:19.532056"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:19.532058"
+          }
+        ]
+      },
+      {
+        "id": "6cd5cdb5-ae21-4d8f-831f-fdf2e20ae222",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-27T19:32:19.535780",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:19.535247"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:19.535253"
+          }
+        ]
+      },
+      {
+        "id": "7e5358e8-188c-4bcb-922b-51a758bc6ebe",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-27T19:32:21.988637",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:21.988129"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:21.988140"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:21.988143"
+          }
+        ]
+      },
+      {
+        "id": "fc249c85-aa4c-45fe-99ad-b0997c07dd0d",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-27T19:32:21.991774",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:21.991281"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-27T19:32:21.991287"
+          }
+        ]
+      },
+      {
+        "id": "0d5f0497-637c-49b5-90f6-30685818e4b7",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-27T20:12:37.426635",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:37.424885"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:37.424911"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:37.424917"
+          }
+        ]
+      },
+      {
+        "id": "7644a6fd-6feb-49a9-a44a-2456567e5ab0",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-27T20:12:37.607197",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:37.601535"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:37.601600"
+          }
+        ]
+      },
+      {
+        "id": "f724db07-f900-47b7-a0f7-8d6165680ea5",
+        "title": "Consulta Antiga 1 (Dor de Cabeça)",
+        "date": "2025-10-27T20:12:45.496320",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Paciente relatou dor de cabeça severa há 2 dias."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:45.495157"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Qual a intensidade da dor em uma escala de 0 a 10?"
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:45.495191"
+          },
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Nível 8, latejante."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:45.495199"
+          }
+        ]
+      },
+      {
+        "id": "17cd4fc7-1683-4354-8f69-5cd3877ad71a",
+        "title": "Consulta Antiga 2 (Febre)",
+        "date": "2025-10-27T20:12:45.510685",
+        "chat_history": [
+          {
+            "role": "user",
+            "parts": [
+              {
+                "text": "Febre de 39°C e tosse seca persistente."
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:45.508021"
+          },
+          {
+            "role": "model",
+            "parts": [
+              {
+                "text": "Há quanto tempo os sintomas estão presentes?"
+              }
+            ],
+            "timestamp": "2025-10-27T20:12:45.508091"
+          }
+        ]
       }
     ]
   },
