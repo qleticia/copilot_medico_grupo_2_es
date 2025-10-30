@@ -1,3 +1,4 @@
+# Uploaded media/files (if applicable)
 # Logs
 logs
 *.log
@@ -22,3 +23,23 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.swp
+
+# Database files
+*.sqlite3
+*.db
+*.bak
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+bin/
+include/
+lib/
+lib64/
