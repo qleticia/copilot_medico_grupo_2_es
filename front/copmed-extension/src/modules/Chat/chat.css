@@ -11,12 +11,11 @@
   }
   
   /* chat.css */
-  .chat-container {
+  .chat-container-div {
     display: flex;
     flex-direction: column;
     height: 480px;
     margin: 0 auto;
-    background-color: #f3f4f6;
     padding: 0.75rem;
     border-radius: 0.5rem;
   }
