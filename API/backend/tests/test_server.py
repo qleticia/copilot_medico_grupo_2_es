@@ -83,3 +83,66 @@ class TestPatientCreation(unittest.TestCase):
         # LINHA CRÍTICA (RED - Falha): Espera-se 200, mas com 'exists': false
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.get_json()['exists'])
+
+    @patch('server.get_all_patients_info')
+    def test_get_all_patients_success(self, mock_get_all_patients_info):
+        """
+        Testa se a rota /api/all-patients retorna status 200 e dados corretos 
+        quando há pacientes no banco de dados.
+        """
+        # Dados simulados retornados pela Camada de Dados (patient_db.py) [4]
+        mock_data = [
+            {"id": "id_pac_1", "name": "Paciente A"},
+            {"id": "id_pac_2", "name": "Paciente B"}
+        ]
+        mock_get_all_patients_info.return_value = mock_data
+
+        # Realiza a requisição GET
+        response = self.app.get('/api/all-patients')
+
+        # Verifica se o status HTTP é 200 (Sucesso) [1]
+        self.assertEqual(response.status_code, 200, "Deve retornar 200 OK.")
+        
+        # Verifica se a função de persistência foi chamada [1]
+        mock_get_all_patients_info.assert_called_once()
+
+        # Valida o corpo da resposta
+        response_data = response.get_json()
+        self.assertEqual(response_data['status'], 'success')
+        self.assertIn('patients', response_data)
+        self.assertEqual(len(response_data['patients']), 2)
+        self.assertEqual(response_data['patients'], mock_data)
+
+    @patch('server.get_all_patients_info')
+    def test_get_all_patients_empty(self, mock_get_all_patients_info):
+        """
+        Testa se a rota /api/all-patients retorna uma lista vazia 
+        quando não há pacientes registrados.
+        """
+        # Simula o retorno de uma lista vazia
+        mock_get_all_patients_info.return_value = []
+
+        # Realiza a requisição GET
+        response = self.app.get('/api/all-patients')
+
+        # Verifica o status e o corpo da resposta
+        self.assertEqual(response.status_code, 200, "Deve retornar 200 OK, mesmo com lista vazia.")
+        response_data = response.get_json()
+        self.assertEqual(response_data['status'], 'success')
+        self.assertEqual(response_data['patients'], [])
+        
+    @patch('server.get_all_patients_info')
+    def test_get_all_patients_internal_error(self, mock_get_all_patients_info):
+        """
+        Testa se a rota /api/all-patients lida corretamente com erros internos do servidor.
+        """
+        # Simula uma exceção interna no nível do banco de dados (Camada de Dados)
+        mock_get_all_patients_info.side_effect = Exception("Erro simulado de DB")
+
+        # Realiza a requisição GET
+        response = self.app.get('/api/all-patients')
+
+        # Verifica se o status HTTP é 500 (Erro Interno do Servidor) [1]
+        self.assertEqual(response.status_code, 500)
+        response_data = response.get_json()
+        self.assertEqual(response_data['status'], 'error')
