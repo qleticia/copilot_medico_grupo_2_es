@@ -58,10 +58,6 @@ const Chat: React.FC<ChatProps> = ({ messages, onSendMessage, isLoading, onUploa
 
   return (
     <div className="chat-container-div">
-      <div className="chat-header">
-        <h2 className="chat-title">Copilot Médico</h2>
-      </div>
-  
       {/* Área das Mensagens */}
       <div className="chat-messages">
         {messages.map((message) => (
