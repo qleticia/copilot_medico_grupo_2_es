@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Key, ReactNode } from 'react';
 import './App.css';
 import Chat from './modules/Chat/chat';
 import { executeArbitraryScriptOnActiveTab, executeScriptOnActiveTab } from './utils/utils'; 
+import { FirstAidIcon, UserCirclePlusIcon } from "@phosphor-icons/react";
 
 const SERVER_URL = 'http://localhost:3001';
 
@@ -30,7 +31,7 @@ function App() {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
-  const [consultationTitle, setConsultationTitle] = useState<string | null>(null);
+  const [_, setConsultationTitle] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -502,71 +503,74 @@ function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <h1>Assistente Médico AI</h1>
+        <h1>Copilot Médico</h1>
+        <FirstAidIcon weight='fill' size={32} />
       </header>
 
       {/* Sidebar */}
-      <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <div className={`sidebar ${isSidebarOpen ? 'open' : ''}`} style={{borderBottom: '1px solid #ccc'}}>
         <h2>Pacientes</h2>
-        <div className="patient-controls">
-          <button onClick={() => setShowNewPatientModal(true)} disabled={isLoading}>
-            + Novo Paciente
-          </button>
-        </div>
         
-        {/* DROPDOWN DE PACIENTES */}
-        <select
-          className="patient-select"
-          value={patientId || ''} // Define o valor selecionado
-          onChange={(e) => {
-            const selectedPatient = allPatients.find(p => p.id === e.target.value);
-            if (selectedPatient) {
-              handleSelectPatient(selectedPatient.id, selectedPatient.name);
-            } else {
-              // Se nenhuma opção for selecionada (ex: a opção "Selecione um paciente"), limpa o estado
-              setPatientId(null);
-              setPatientName(null);
-              setConsultationId(null);
-              setConsultationTitle(null);
-              setMessages([{ id: Date.now(), text: "Nenhum paciente selecionado.", sender: 'bot', timestamp: new Date().toISOString() }]);
-            }
-          }}
-          disabled={isLoading}
-          style={{ width: '100%', padding: '8px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
-        >
-          <option value="">Selecione um Paciente</option>
-          {allPatients.map((patient) => (
-            <option key={patient.id} value={patient.id}>
-              {patient.name} ({patient.id.substring(0, 8)}...)
-            </option>
-          ))}
-        </select>
+        <div className='new-patient-div'>
+          {/* DROPDOWN DE PACIENTES */}
+          <select
+            className="patient-select"
+            value={patientId || ''} // Define o valor selecionado
+            onChange={(e) => {
+              const selectedPatient = allPatients.find(p => p.id === e.target.value);
+              if (selectedPatient) {
+                handleSelectPatient(selectedPatient.id, selectedPatient.name);
+              } else {
+                // Se nenhuma opção for selecionada (ex: a opção "Selecione um paciente"), limpa o estado
+                setPatientId(null);
+                setPatientName(null);
+                setConsultationId(null);
+                setConsultationTitle(null);
+                setMessages([{ id: Date.now(), text: "Nenhum paciente selecionado.", sender: 'bot', timestamp: new Date().toISOString() }]);
+              }
+            }}
+            disabled={isLoading}
+          >
+            <option value="">Selecione um Paciente</option>
+            {allPatients.map((patient) => (
+              <option key={patient.id} value={patient.id}>
+                {patient.name} ({patient.id.substring(0, 8)}...)
+              </option>
+            ))}
+          </select>
+
+          <div className="patient-controls">
+            <button className='btn-green small' onClick={() => setShowNewPatientModal(true)} disabled={isLoading}>
+              <UserCirclePlusIcon size={21} weight='fill' />
+            </button>
+          </div>
+        </div>
 
         {patientId && (
           <>
-            <h2>Consultas de {patientName || patientId.substring(0, 8)}...</h2>
+            <h2>Paciente: {patientName || patientId.substring(0, 8)}</h2>
             <div className="consultation-controls">
-                <button 
+                <button className='btn-white'
                     onClick={() => setShowImportHistoryModal(true)} 
                     disabled={isLoading}
                     style={{ marginRight: '5px' }}
                 >
-                    + Nova Consulta (Importar)
+                    Importar Consulta
                 </button>
-                <button 
+                <button className='btn-green'
                     onClick={() => {
                         setSelectedConsultationIdsToImport([]);
                         handleCreateNewConsultation(); 
                     }} 
                     disabled={isLoading}
                 >
-                    + Nova Consulta (Vazia)
+                    Nova Consulta
                 </button>
             </div>
             
             {/* DROPDOWN DE CONSULTAS */}
             <select
-              className="consultation-select"
+              className="patient-select"
               value={consultationId || ''} // Define o valor selecionado
               onChange={(e) => {
                 const selectedConsultation = patientConsultations.find(c => c.id === e.target.value);
@@ -580,7 +584,6 @@ function App() {
                 }
               }}
               disabled={isLoading || patientConsultations.length === 0}
-              style={{ width: '100%', padding: '8px', marginBottom: '10px', borderRadius: '4px', border: '1px solid #ccc' }}
             >
               <option value="">Selecione uma Consulta</option>
               {patientConsultations.map((consultation) => (
@@ -595,11 +598,6 @@ function App() {
 
       {/* Main Chat Area */}
       <div className="chat-container">
-        <div className="chat-info">
-          Paciente: **{patientName || "Não Selecionado"}** {patientId ? `(${patientId.substring(0, 8)}...)` : ''}
-          <br />
-          Consulta: **{consultationTitle || "Não Selecionada"}** {consultationId ? `(${consultationId.substring(0, 8)}...)` : ''}
-        </div>
         
         {/* O COMPONENTE CHAT AGORA RECEBE AS FUNÇÕES DE ENVIO E UPLOAD */}
         <Chat
@@ -659,10 +657,10 @@ function App() {
               style={{ width: 'calc(100% - 20px)', marginBottom: '10px', padding: '8px' }}
             />
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-              <button onClick={() => setShowNewPatientModal(false)} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#6b7280' }}>
+              <button onClick={() => setShowNewPatientModal(false)} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#D9D9D9' }}>
                 Cancelar
               </button>
-              <button onClick={handleCreateNewPatient} disabled={isLoading} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white' }}>
+              <button onClick={handleCreateNewPatient} disabled={isLoading} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#336B29', color: 'white' }}>
                 Criar
               </button>
             </div>
@@ -715,7 +713,7 @@ function App() {
                   setSelectedConsultationIdsToImport([]); 
                   setShowImportHistoryModal(false); 
                 }}
-                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#6b7280' }}
+                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#D9D9D9' }}
               >
                 Cancelar
               </button>
@@ -724,7 +722,7 @@ function App() {
                   handleCreateNewConsultation(); 
                 }}
                 disabled={isLoading} 
-                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white' }}
+                style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#336B29', color: 'white' }}
               >
                 Criar Nova Consulta com Histórico(s)
               </button>

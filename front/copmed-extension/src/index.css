@@ -29,29 +29,14 @@
         background-color: #3a3a3a; 
         color: #ffffff;
     }
-    .chat-message-user .chat-message {
-        background-color: #1e40af;
-        color: #fff;
-    }
-    .chat-message-bot .chat-message {
-        background-color: #4b5563; 
-        color: #f3f4f6;
-    }
     .chat-input {
         border: 1px solid #4b5563;
         background-color: #374151;
         color: #ffffff;
     }
     .chat-input:focus {
-        border-color: #3b82f6;
+        border-color: #114C0E;
         box-shadow: 0 0 0 2px #3b82f633;
-    }
-    .chat-send-button {
-        background-color: #3b82f6;
-        color: #fff;
-    }
-    .chat-send-button:hover {
-        background-color: #2563eb;
     }
     button {
         background-color: #353535;
@@ -65,13 +50,21 @@
         background-color: #2d2d2d;
         color: #ffffff;
     }
+
+    .patient-select{
+        background-color: #ccc;
+    }
+
+    .btn-white{
+        background-color: #ccc;
+    }
 }
 
 @media (prefers-color-scheme: light) {
     /* TEMA CLARO */
     :root {
-        color: #213547;
-        background-color: #fff;
+        color: #565555;
+        background-color: #dcdcdc;
     }
     
     .chat-container {
@@ -86,33 +79,17 @@
     .chat-messages {
         background-color: #fff;
     }
-    .chat-message-user .chat-message {
-        background-color: #3b82f6;
-        color: #fff;
-    }
-    .chat-message-bot .chat-message {
-        background-color: #e5e7eb;
-        color: #1f2937;
-    }
     .chat-input {
         border: 1px solid #d1d5db;
         background-color: #ffffff;
         color: #1f2937;
     }
     .chat-input:focus {
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px #3b82f633;
-    }
-    .chat-send-button {
-        background-color: #3b82f6;
-        color: #fff;
-    }
-    .chat-send-button:hover {
-        background-color: #2563eb;
-    }
-    
+        border-color: #114C0E;
+        box-shadow: 0 0 0 2px #529f44;
+    }    
     a:hover {
-        color: #747bff;
+        color: #336B29;
     }
     button {
         background-color: #f9f9f9;
@@ -120,11 +97,17 @@
 
     .new-patient-modal{
         background-color: #ffffff;
-        color: #213547;
+        color: #000000;
     }
     .history-import-modal{
         background-color: #ffffff;
-        color: #213547;
+        color: #000000;
+    }
+    .patient-select{
+        background-color: #FFFFFF;
+    }
+    .btn-white{
+        background-color: #FFFFFF;
     }
 }
 
@@ -161,7 +144,7 @@
 .chat-container {
     display: flex;
     flex-direction: column;
-    margin: 0 auto;
+    margin: 10px auto;
     padding: .75rem;
     border-radius: .5rem;
 }
@@ -207,6 +190,16 @@
     border-radius: .5rem;
 }
 
+.chat-message-user .chat-message {
+    background-color: #d9d9d9; 
+    color: #000000;
+}
+
+.chat-message-bot .chat-message {
+    background-color: #336B29;
+    color: #fff;
+}
+
 .chat-message-text {
     margin: 0;
     font-size: .875rem;
@@ -232,6 +225,8 @@
 }
 
 .chat-send-button {
+    background-color: #336B29;
+    color: #fff;
     padding: .5rem;
     border: none;
     border-radius: .5rem;
@@ -239,6 +234,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.chat-send-button:hover {
+    background-color: #114C0E;
 }
 
 :root {
@@ -254,12 +253,12 @@
 
 a {
     font-weight: 500;
-    color: #646cff;
+    color: #529f44;
     text-decoration: inherit;
 }
 
 a:hover {
-    color: #535bf2;
+    color: #336B29;
 }
 
 body {
@@ -271,7 +270,7 @@ body {
 }
 
 h1 {
-    font-size: 3.2em;
+    font-size: 3em;
     line-height: 1.1;
 }
 
@@ -287,7 +286,7 @@ button {
 }
 
 button:hover {
-    border-color: #646cff;
+    border-color: #114C0E;
 }
 
 button:focus,
@@ -312,6 +311,56 @@ button:focus-visible {
 
 .chat-message {
     overflow-wrap: break-word !important;
+}
+
+.new-patient-div{
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+}
+
+.consultation-controls{
+    display: flex;
+    flex-direction: row;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.App-header{
+    display: flex;
+    flex-direction: row;
+    border-bottom: 1px solid #ccc;
+    align-items: center;
+    gap: 15px;
+}
+
+option{
+    color: #000000;
+}
+
+.patient-select{
+    color: #000000; 
+    width: 100%;
+    height: 20%;
+    padding: 8px;
+    border-radius: 4px;
+    border: 1px solid #114C0E;
+    margin-bottom: 10px;
+}
+
+.btn-green{
+    background-color: #336B29;
+    color: #FFFFFF;
+    border: 1px solid #114C0E;
+}
+
+.small{
+    padding: .3em 0.5em;
+}
+
+.btn-white{
+    color: #336B29;
+    border: 1px solid #114C0E;
 }
 
 
