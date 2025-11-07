@@ -363,7 +363,7 @@
         "date": "2025-07-05T10:03:06.378828",
         "chat_history": [
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "Históricos importados de consultas anteriores: 93af8b67..., 3a741494..., 03d20f8d...."
@@ -372,7 +372,7 @@
             "timestamp": "2025-07-05T10:03:06.376828"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Início do Histórico da Consulta 93af8b67... ---"
@@ -399,7 +399,7 @@
             "timestamp": "2025-07-04T19:17:39.000043"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Fim do Histórico da Consulta 93af8b67... ---"
@@ -408,7 +408,7 @@
             "timestamp": "2025-07-05T10:03:06.377827"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Início do Histórico da Consulta 3a741494... ---"
@@ -435,7 +435,7 @@
             "timestamp": "2025-07-04T19:39:38.176966"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Fim do Histórico da Consulta 3a741494... ---"
@@ -444,7 +444,7 @@
             "timestamp": "2025-07-05T10:03:06.377827"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Início do Histórico da Consulta 03d20f8d... ---"
@@ -480,7 +480,7 @@
             "timestamp": "2025-07-04T19:39:42.802314"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Fim do Histórico da Consulta 03d20f8d... ---"
@@ -1711,7 +1711,7 @@
         "date": "2025-07-05T10:14:30.531903",
         "chat_history": [
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "Históricos importados de consultas anteriores: 847b2fe2..., 5ec032e7...."
@@ -1720,7 +1720,7 @@
             "timestamp": "2025-07-05T10:14:30.527875"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Início do Histórico da Consulta 847b2fe2... ---"
@@ -1765,7 +1765,7 @@
             "timestamp": "2025-07-05T10:06:02.849348"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Fim do Histórico da Consulta 847b2fe2... ---"
@@ -1774,7 +1774,7 @@
             "timestamp": "2025-07-05T10:14:30.528882"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Início do Histórico da Consulta 5ec032e7... ---"
@@ -1819,7 +1819,7 @@
             "timestamp": "2025-07-05T10:07:51.581145"
           },
           {
-            "role": "bot",
+           "role": "model",
             "parts": [
               {
                 "text": "--- Fim do Histórico da Consulta 5ec032e7... ---"
