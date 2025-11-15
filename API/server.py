@@ -287,6 +287,58 @@ def get_all_patients():
         traceback.print_exc() 
         return jsonify({"status": "error", "message": f"Erro ao obter lista de pacientes: {e}"}), 500
 
+@app.route('/api/recommendations', methods=['POST'])
+def handle_recommendations():
+    """
+    Endpoint para solicitação de recomendações com base no andamento/histórico da consulta.
+    """
+    try:
+
+        data = request.get_json()
+
+        # Verifica se o JSON existe
+        if not data:
+            return jsonify({"error": "Requisição inválida. Corpo JSON esperado."}), 400
+
+        # Verifica se o patient_id e o consultation_id estão presentes no JSON
+        patient_id = data.get('patient_id')
+        consultation_id = data.get('consultation_id')
+
+        if not patient_id or not consultation_id:
+            return jsonify({"error": "paciente_id e consulta_id não encontrados."}), 400
+
+        # Define o caminho para o arquivo do prompt de recomendações
+        prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
+
+        # Verifica se o arquivo existe
+        if not os.path.exists(prompt_file_path):
+            raise FileNotFoundError(f"Arquivo de prompt não encontrado em: {prompt_file_path}")
+
+        # Lê o conteúdo do arquivo
+        with open(prompt_file_path, 'r', encoding='utf-8') as f:
+            prompt_recomendacao_medica = f.read()
+
+        if not prompt_recomendacao_medica:
+            raise ValueError(f"O arquivo de prompt {prompt_file_path} está vazio.")
+
+        print(f"[RECOMENDAÇÃO] Iniciando busca para consulta_id: {consultation_id}")
+
+        # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
+        # recebe o prompt de recomendação.
+        resposta_ia = gemini_connection.send_message(
+            patient_id,
+            consultation_id,
+            prompt_recomendacao_medica
+        )
+
+        # Retornar a recomendação para o frontend
+        return jsonify({"status": "success", "recommendation": resposta_ia}), 200
+
+    except Exception as e:
+        print(f"Erro catastrófico no endpoint /get_recommendation: {e}")
+        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
+
+
 
 if __name__ == '__main__':
     print("Servidor Flask com Gemini e DB de Paciente iniciado.")
