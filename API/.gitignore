@@ -1,6 +1,6 @@
 # Python
 __pycache__/
-*.pyc
+**/.pyc
 *.pyo
 *.pyd
 .Python
@@ -34,3 +34,5 @@ instance/
 
 # Logs
 *.log
+# JSON files for local development
+*.json
