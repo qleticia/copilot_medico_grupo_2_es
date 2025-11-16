@@ -23,6 +23,49 @@ from backend.patient_db import (
 app = Flask(__name__)
 CORS(app)
 
+# NOVO ENDPOINT: Diarização de Áudio
+@app.route('/api/diarize_audio', methods=['POST'])
+def diarize_audio_route():
+    """
+    Recebe um arquivo de áudio e simula o envio para processamento
+    de diferenciação de voz (Diarização).
+    """
+    try:
+        # A rota espera que o arquivo seja enviado sob o nome 'audio_file'
+        if 'audio_file' not in request.files:
+            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado (esperado 'audio_file' no form-data)."}), 400
+
+        audio_file = request.files['audio_file']
+        
+        # O arquivo precisa ser lido (ex: audio_file.read()) e enviado
+        # para o módulo especializado (ex: audio_listener.py ou um worker via RabbitMQ).
+
+        # Verificação básica do nome do arquivo (opcional)
+        filename = audio_file.filename or "audio_sem_nome"
+
+        # --- SIMULAÇÃO DO FLUXO DE PROCESSAMENTO ---
+        # ATENÇÃO: Na produção, esta lógica chamaria o módulo que usa 
+        # google-cloud-speech com a flag de Diarização.
+        
+        # Supondo que o processamento foi bem-sucedido e retornou o resultado.
+        simulated_result = {
+            "file_name": filename,
+            "transcricao_diarizada": "Mensagem presente no áudio!!!",
+            "speakers_identificados": 2,
+            "processamento_status": "Simulação concluída. Pronto para enviar ao LLM."
+        }
+        
+        return jsonify({
+            "status": "success",
+            "message": f"Áudio '{filename}' recebido e processamento de diarização simulado com sucesso.",
+            "diarization_data": simulated_result
+        }), 200
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro interno ao processar diarização: {e}"}), 500
+
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
 def check_patient_exists_api(patient_id):
