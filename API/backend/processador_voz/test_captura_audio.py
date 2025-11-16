@@ -33,14 +33,14 @@ class TestarCapturaAudio(unittest.TestCase):
         except Exception as e:
             self.fail(f"Falha ao inicializar o CapturaAudio: {e}")
 
-    def test_escutar_paciente_retorna_audio_data(self):
+    def test_escutar_usuario_retorna_audio_data(self):
         """
-        Testa o método escutar_paciente() para verificar se ele captura
+        Testa o método escutar_usuario() para verificar se ele captura
         e retorna um objeto do tipo AudioData.
 
         *** ATENÇÃO: TESTE MANUAL ***
         """
-        print("\n--- INICIANDO TESTE: test_escutar_paciente_retorna_audio_data ---")
+        print("\n--- INICIANDO TESTE: test_escutar_usuario_retorna_audio_data ---")
         print(f"\n>>> POR FAVOR, FALE ALGO NO MICROFONE AGORA <<<")
         print("(O teste começará a ouvir em 1 segundo...)")
         time.sleep(1)
@@ -48,7 +48,7 @@ class TestarCapturaAudio(unittest.TestCase):
         # Chama o método que queremos testar
         # O método listen() bloqueará até que você pare de falar
         print(">>> OUVINDO... (fale e depois faça uma pausa)")
-        audio_data = self.capturador.escutar_paciente()
+        audio_data = self.capturador.escutar_usuario()
         print(">>> CAPTURA CONCLUÍDA. Verificando dados...")
 
         # 1. Verificação principal: O objeto não deve ser Nulo
