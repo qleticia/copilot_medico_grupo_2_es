@@ -209,7 +209,7 @@ def handle_patient_consultations(patient_id):
             
             if import_consultation_ids and isinstance(import_consultation_ids, list) and len(import_consultation_ids) > 0:
                 initial_history.append({
-                    "role": "bot",
+                    "role": "model",
                     "parts": [{"text": f"Históricos importados de consultas anteriores: {', '.join([c_id[:8] + '...' for c_id in import_consultation_ids])}."}],
                     "timestamp": datetime.now().isoformat()
                 })
@@ -218,13 +218,13 @@ def handle_patient_consultations(patient_id):
                     old_history = get_consultation_chat_history(patient_id, old_consultation_id)
                     if old_history:
                         initial_history.append({
-                            "role": "bot",
+                            "role": "model",
                             "parts": [{"text": f"--- Início do Histórico da Consulta {old_consultation_id[:8]}... ---"}],
                             "timestamp": datetime.now().isoformat()
                         })
                         initial_history.extend(old_history)
                         initial_history.append({
-                            "role": "bot",
+                            "role": "model",
                             "parts": [{"text": f"--- Fim do Histórico da Consulta {old_consultation_id[:8]}... ---"}],
                             "timestamp": datetime.now().isoformat()
                         })
