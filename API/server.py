@@ -6,6 +6,8 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import tempfile
+import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import gemini_connection
@@ -19,6 +21,7 @@ from backend.patient_db import (
     add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
     get_consultation_chat_history, add_message_to_consultation_history
 )
+from backend.processador_voz.processador_voz import TranscritorVoz
 
 app = Flask(__name__)
 CORS(app)
@@ -65,6 +68,70 @@ def diarize_audio_route():
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno ao processar diarização: {e}"}), 500
+
+
+@app.route('/api/transcribe_audio', methods=['POST'])
+def transcribe_audio_route():
+    """
+    Recebe um arquivo de áudio (preferencialmente WAV) no campo 'audio_file'
+    e utiliza o módulo `processador_voz.TranscritorVoz` para transcrever o áudio.
+    Retorna JSON com o texto transcrito.
+    """
+    try:
+        if 'audio_file' not in request.files:
+            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado (esperado 'audio_file' no form-data)."}), 400
+
+        audio_file = request.files['audio_file']
+        
+        if audio_file.filename == '':
+            return jsonify({"status": "error", "message": "Arquivo de áudio vazio."}), 400
+
+        print(f"[TRANSCRIÇÃO] Processando arquivo: {audio_file.filename}")
+
+        # Salva temporariamente o arquivo recebido com a extensão adequada
+        file_ext = '.wav'
+        if audio_file.filename and '.' in audio_file.filename:
+            file_ext = '.' + audio_file.filename.split('.')[-1]
+            
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+            tmp_path = tmp.name
+            audio_file.save(tmp_path)
+            print(f"[TRANSCRIÇÃO] Arquivo salvo temporariamente em: {tmp_path}")
+
+        try:
+            # Utiliza o TranscritorVoz para transcrever
+            print(f"[TRANSCRIÇÃO] Iniciando transcrição com TranscritorVoz...")
+            transcritor = TranscritorVoz(idioma="pt-BR")
+            
+            with sr.AudioFile(tmp_path) as source:
+                audio_data = transcritor.reconhecedor.record(source)
+                print(f"[TRANSCRIÇÃO] Áudio carregado da fonte. Duration: {len(audio_data.frame_data) / audio_data.sample_rate:.2f}s")
+
+            texto = transcritor.transcrever(audio_data)
+            print(f"[TRANSCRIÇÃO] Transcrição concluída: {texto[:100]}...")
+
+            # Remove arquivo temporário
+            os.remove(tmp_path)
+            
+            return jsonify({
+                "status": "success",
+                "transcription": texto
+            }), 200
+            
+        except Exception as e:
+            print(f"[TRANSCRIÇÃO] Erro durante processamento: {e}")
+            import traceback
+            traceback.print_exc()
+            # Remove arquivo temporário em caso de erro
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
+
+    except Exception as e:
+        print(f"[TRANSCRIÇÃO] Erro interno: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro interno ao transcrever áudio: {e}"}), 500
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
