@@ -7,7 +7,7 @@ class CapturaAudio:
     """
     def __init__(self):
         self.reconhecedor = sr.Recognizer()
-        self.microfone = sr.Microphone()/
+        self.microfone = sr.Microphone()
         self.reconhecedor.pause_threshold = 0.8
         self.reconhecedor.dynamic_energy_threshold = True
 

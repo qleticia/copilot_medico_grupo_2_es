@@ -814,54 +814,41 @@ function App() {
     }
   }, [selectorInput]);
 
-  // --- gravação do áudio ---
+// --- gravação do áudio ---
   const [isRecording, setIsRecording] = useState<boolean>(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  // const chunksRef = useRef<Blob[]>([]);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
-  // Helper functions para conversão de áudio
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const isLoopingRef = useRef<boolean>(false);
+
+  // Ref para controlar o timer de corte e evitar sobreposição
+  const stopTimerRef = useRef<number | null>(null);
+
+  // ---  Helper functions para conversão de áudio ---
   const audioBufferToWavBlob = useCallback((audioBuffer: AudioBuffer) => {
     const numOfChan = audioBuffer.numberOfChannels;
     const length = audioBuffer.length * numOfChan * 2 + 44;
     const buffer = new ArrayBuffer(length);
     const view = new DataView(buffer);
-
     const channels: Float32Array[] = [];
     for (let i = 0; i < numOfChan; i++) {
       channels.push(audioBuffer.getChannelData(i));
     }
-
     /* RIFF identifier */ writeString(view, 0, "RIFF");
-    /* file length */ view.setUint32(
-      4,
-      36 + audioBuffer.length * numOfChan * 2,
-      true
-    );
+    /* file length */ view.setUint32(4, 36 + audioBuffer.length * numOfChan * 2, true);
     /* RIFF type */ writeString(view, 8, "WAVE");
     /* format chunk identifier */ writeString(view, 12, "fmt ");
     /* format chunk length */ view.setUint32(16, 16, true);
     /* sample format (raw) */ view.setUint16(20, 1, true);
     /* channel count */ view.setUint16(22, numOfChan, true);
     /* sample rate */ view.setUint32(24, audioBuffer.sampleRate, true);
-    /* byte rate (sample rate * block align) */ view.setUint32(
-      28,
-      audioBuffer.sampleRate * numOfChan * 2,
-      true
-    );
-    /* block align (channel count * bytes per sample) */ view.setUint16(
-      32,
-      numOfChan * 2,
-      true
-    );
+    /* byte rate */ view.setUint32(28, audioBuffer.sampleRate * numOfChan * 2, true);
+    /* block align */ view.setUint16(32, numOfChan * 2, true);
     /* bits per sample */ view.setUint16(34, 16, true);
     /* data chunk identifier */ writeString(view, 36, "data");
-    /* data chunk length */ view.setUint32(
-      40,
-      audioBuffer.length * numOfChan * 2,
-      true
-    );
-
+    /* data chunk length */ view.setUint32(40, audioBuffer.length * numOfChan * 2, true);
     let offset = 44;
     for (let i = 0; i < audioBuffer.length; i++) {
       for (let channel = 0; channel < numOfChan; channel++) {
@@ -871,7 +858,6 @@ function App() {
         offset += 2;
       }
     }
-
     return new Blob([view], { type: "audio/wav" });
   }, []);
 
@@ -881,13 +867,12 @@ function App() {
     }
   };
 
+  // --- Envio do áudio para o servidor ---
   const sendAudioToServer = useCallback(
     async (wavBlob: Blob) => {
       try {
         const form = new FormData();
-        const file = new File([wavBlob], "recording.wav", {
-          type: "audio/wav",
-        });
+        const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
         form.append("audio_file", file);
 
         const resp = await fetch(`${SERVER_URL}/api/transcribe_audio`, {
@@ -901,11 +886,25 @@ function App() {
         }
 
         const data = await resp.json();
+
+        // Caso o backend retornar uma mensagem de erro de entendimento, a mensagem é ignorada e não é enviada para o chat
+        const invalidPhrases = [
+            "Não foi possível entender o áudio",
+            "Não foi possível entender o áudio.",
+            "Erro na API de reconhecimento de fala"
+        ];
+
         if (data && data.transcription) {
-          // Envia a transcrição como se fosse uma mensagem do usuário
-          await handleSendMessage(String(data.transcription));
-        } else {
-          console.warn("Resposta sem transcrição:", data);
+            const texto = String(data.transcription).trim();
+
+            // Verifica se o texto é uma das frases de erro
+            const ehErro = invalidPhrases.some(phrase => texto.includes(phrase));
+
+            if (!ehErro && texto.length > 0) {
+                await handleSendMessage(texto);
+            } else {
+                console.log("Silêncio ou áudio incompreensível detectado. Ignorando envio ao chat.");
+            }
         }
       } catch (err) {
         console.error("Erro ao enviar áudio para o servidor:", err);
@@ -914,147 +913,175 @@ function App() {
     [handleSendMessage]
   );
 
-  const startAudioRecording = useCallback(async () => {
+  // --- Processamento ---
+  const processAndSendAudio = useCallback(async (blob: Blob) => {
+    if (blob.size < 1000) return;
+
     try {
-      console.log("Iniciando gravação de áudio...");
+      const arrayBuffer = await blob.arrayBuffer();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const wavBlob = audioBufferToWavBlob(decodedBuffer);
+
+      // Envia o áudio ao servidor e espera (com o filtro de silêncio aplicado dentro)
+      await sendAudioToServer(wavBlob);
+
+      if (audioCtx.state !== 'closed') await audioCtx.close();
+    } catch (err) {
+      console.error("Erro ao processar áudio:", err);
+    }
+  }, [audioBufferToWavBlob, sendAudioToServer]);
+
+
+  // --- Ciclo de Gravação ---
+  const startRecordingCycle = useCallback(async () => {
+    // Verificação de segurança: Se já estiver gravando ou processando o áudio, ABORTA.
+    if (isProcessing) return;
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        console.warn("Tentativa de iniciar gravação duplicada impedida.");
+        return;
+    }
+
+    try {
+      console.log("🔄 Iniciando ciclo...");
+
+      // Limpa timer anterior se existir "fantasma"
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+
+      // Refresh do Stream
+      if (streamRef.current) {
+         streamRef.current.getTracks().forEach(t => t.stop());
+      }
 
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.log("entrou no if");
-        throw new Error("getUserMedia não está disponível neste navegador.");
+         throw new Error("Microfone não suportado.");
       }
-      console.log("passou do if");
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-      });
 
-      console.log("Stream de áudio obtido com sucesso");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
 
-      mediaRecorder.ondataavailable = async (e: BlobEvent) => {
-        if (!e.data || e.data.size === 0) return;
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
 
-        console.log("[AUDIO] Chunk recebido, tamanho:", e.data.size);
+      mediaRecorder.onstop = async () => {
+        console.log("⏹️ Processando...");
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        chunksRef.current = [];
 
-        try {
-          const arrayBuffer = await e.data.arrayBuffer();
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const AudioCtx: any =
-            window.AudioContext || (window as any).webkitAudioContext;
-          const audioCtx = new AudioCtx();
+        // Limpeza Total
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(t => t.stop());
+            streamRef.current = null;
+        }
+        mediaRecorderRef.current = null; // Garante que o ref esteja limpo
 
-          let audioBuffer: AudioBuffer | null = null;
-          try {
-            audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-          } catch (decodeErr) {
-            console.warn(
-              "decodeAudioData falhou para este chunk, farei fallback enviando o blob diretamente:",
-              decodeErr
-            );
-          }
+        setIsProcessing(true);
+        setIsRecording(false);
 
-          if (audioBuffer) {
-            const wavBlob = audioBufferToWavBlob(audioBuffer);
-            await sendAudioToServer(wavBlob);
-            audioCtx.close?.();
-            return;
-          }
+        // Envia o áudio(caso o áudio seja silêncioso, o sendAudioToServer ignora o chat)
+        await processAndSendAudio(blob);
 
-          // Fallback: enviar o blob original (p.ex. webm/opus) para o backend, que pode lidar com múltiplos formatos
-          try {
-            await sendAudioToServer(e.data);
-          } catch (fallbackErr) {
-            console.error(
-              "Fallback ao enviar blob direto também falhou:",
-              fallbackErr
-            );
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now(),
-                text: `Erro ao processar parte do áudio: ${
-                  fallbackErr instanceof Error
-                    ? fallbackErr.message
-                    : String(fallbackErr)
-                }`,
-                sender: "bot",
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          }
-        } catch (err) {
-          console.error("Erro inesperado no processamento do chunk:", err);
-          setMessages((prev) => [
+        setIsProcessing(false);
+
+        // Só reinicia se o usuário ainda quiser
+        if (isLoopingRef.current) {
+             // Timeout pequeno para garantir que o state 'recording' limpou
+             setTimeout(() => startRecordingCycle(), 300);
+        }
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+      isLoopingRef.current = true;
+
+      // Timer seguro guardado na Ref
+      stopTimerRef.current = setTimeout(() => {
+         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+             mediaRecorderRef.current.stop();
+         }
+      }, 7000); // 7 segundos
+
+      } catch (err: any) {
+        console.error("Falha crítica no ciclo de gravação:", err);
+
+        // Para tudo imediatamente
+        setIsRecording(false);
+        setIsProcessing(false);
+        isLoopingRef.current = false; // Impede reinício automático
+
+
+        let userMessage = "Ocorreu um erro ao tentar gravar o áudio.";
+
+        // Tratamento específico de erros de Áudio/WebRTC
+        if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+            userMessage = "Permissão de microfone negada. Por favor, clique no ícone de cadeado/configurações do navegador e permita o acesso.";
+        } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+            userMessage = "Nenhum microfone foi encontrado no sistema. Verifique a conexão.";
+        } else if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+            userMessage = "O microfone está sendo usado por outro aplicativo ou está com defeito.";
+        } else if (err.message === "Microfone não suportado.") {
+            userMessage = "Seu navegador não suporta gravação de áudio. Tente usar o Chrome, Firefox ou Edge atualizados.";
+        }
+
+        // Envia mensagem para o chat avisando o usuário
+        setMessages((prev) => [
             ...prev,
             {
-              id: Date.now(),
-              text: `Erro ao processar parte do áudio: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-              sender: "bot",
-              timestamp: new Date().toISOString(),
-            },
-          ]);
+                id: Date.now(),
+                text: `${userMessage}`,
+                sender: "bot",
+                timestamp: new Date().toISOString()
+            }
+        ]);
         }
-      };
+    }, [processAndSendAudio, setMessages, isProcessing]); // Dependências
 
-      mediaRecorder.onstop = () => {
-        console.log("Gravação parada. Limpando stream...");
-        if (streamRef.current) {
-          streamRef.current
-            .getTracks()
-            .forEach((t: MediaStreamTrack) => t.stop());
-          streamRef.current = null;
-        }
-        mediaRecorderRef.current = null;
-        setIsRecording(false);
-      };
 
-      const CHUNK_MS = 10000;
-      mediaRecorder.start(CHUNK_MS);
-      setIsRecording(true);
-      console.log("Gravação iniciada em modo streaming");
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error("Erro ao iniciar gravação:", errorMsg, err);
+  // --- Parada Manual ---
+  const stopManual = useCallback(() => {
+      console.log("🛑 Parada manual.");
+      isLoopingRef.current = false; // Trava reinício
 
-      let userMessage = "Erro ao acessar o microfone.";
-      if (
-        errorMsg.includes("NotAllowedError") ||
-        errorMsg.includes("Permission denied")
-      ) {
-        userMessage =
-          "Permissão de microfone negada. Verifique as configurações de permissões do navegador.";
-      } else if (
-        errorMsg.includes("NotFoundError") ||
-        errorMsg.includes("no device found")
-      ) {
-        userMessage = "Nenhum dispositivo de microfone encontrado.";
-      } else if (errorMsg.includes("getUserMedia não está disponível")) {
-        userMessage =
-          "Seu navegador não suporta gravação de áudio. Tente usar outro navegador.";
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current); // Mata o timer automático
+
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+          mediaRecorderRef.current.stop();
+      } else {
+          // Se não estiver gravando (estava processando), força o estado visual
+          setIsRecording(false);
+          setIsProcessing(false);
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          text: userMessage,
-          sender: "bot",
-          timestamp: new Date().toISOString(),
-        },
-      ]);
-    }
-  }, [sendAudioToServer, audioBufferToWavBlob, setMessages]);
+      if (streamRef.current) {
+          streamRef.current.getTracks().forEach(t => t.stop());
+          streamRef.current = null;
+      }
+  }, []);
 
-  // Inicia gravação automaticamente quando consulta é selecionada
+  // --- useEffect Inicial ---
   useEffect(() => {
-    if (consultationId && mediaRecorderRef.current === null) {
-      startAudioRecording();
+    if (consultationId && !isRecording && !isProcessing) {
+      // Delay de segurança inicial
+      const timer = setTimeout(() => {
+          // Verificação extra antes de iniciar
+          if (!isLoopingRef.current) startRecordingCycle();
+      }, 1000);
+      return () => clearTimeout(timer);
     }
-  }, [consultationId, startAudioRecording]);
+
+    return () => {
+        isLoopingRef.current = false;
+        if (stopTimerRef.current) clearTimeout(stopTimerRef.current);
+        if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    };
+  }, [consultationId, startRecordingCycle]); // Dependências limpas
 
   /* As funções abaixo serão usadas no futuro para controlar a gravação
   const stopAudioRecording = useCallback(() => {
@@ -1230,52 +1257,68 @@ function App() {
       </button> */}
 
       {consultationId && (
+  <div
+    style={{
+      display: "flex",
+      alignItems: "center",
+      marginTop: "10px",
+      justifyContent: "space-between",
+      padding: "0 10px",
+    }}
+  >
+    {/* --- Área dos Indicadores (Ouvindo vs Processando) --- */}
+    <div>
+      {isProcessing ? (
+        // Estado 1: Microfone pausado, aguardando resposta do servidor
         <div
           style={{
             display: "flex",
             alignItems: "center",
-            marginTop: "10px",
-            justifyContent: "space-between",
-            padding: "0 10px",
+            gap: "5px",
           }}
         >
-          <div>
-            {isRecording ? (
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "5px",
-                }}
-              >
-                <span>
-                  <RecordIcon size={20} weight="fill" color="#e66060" />
-                </span>
-                <label style={{ color: "#e66060", fontWeight: "bold" }}>
-                  Gravando áudio...
-                </label>
-              </div>
-            ) : null}
-          </div>
-
-          <button
-            onClick={() => {
-              if (mediaRecorderRef.current && isRecording) {
-                mediaRecorderRef.current.stop();
-                setIsRecording(false);
-              }
-            }}
-            style={{
-              padding: "8px 12px",
-              backgroundColor: "#e66060",
-              color: "white",
-            }}
-          >
-            Parar gravação
-          </button>
+          <label style={{ color: "orange", fontWeight: "bold" }}>
+            ⏳ Processando resposta...
+          </label>
         </div>
-      )}
+      ) : isRecording ? (
+        // Estado 2: Microfone aberto, gravando áudio
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
+          }}
+        >
+          <span>
+            <RecordIcon size={20} weight="fill" color="#e66060" />
+          </span>
+          <label style={{ color: "#e66060", fontWeight: "bold" }}>
+            Ouvindo...
+          </label>
+        </div>
+      ) : null}
+    </div>
 
+    {/* --- Botão de Parar --- */}
+    <button
+      onClick={stopManual}
+      style={{
+        padding: "8px 12px",
+        backgroundColor: "#e66060",
+        color: "white",
+        border: "none",
+        borderRadius: "4px",
+        cursor: "pointer",
+        // O botão fica ativo se estiver gravando OU processando
+        opacity: (isRecording || isProcessing) ? 1 : 0.5,
+        pointerEvents: (isRecording || isProcessing) ? 'auto' : 'none'
+      }}
+    >
+      Parar gravação
+    </button>
+  </div>
+)}
       {/* Main Chat Area */}
       <div className="chat-container">
         {/* O COMPONENTE CHAT AGORA RECEBE AS FUNÇÕES DE ENVIO E UPLOAD */}
