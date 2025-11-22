@@ -77,7 +77,7 @@ function App() {
   const recordingDurationRef = useRef<number>(0);
   const [transcriptionLog, setTranscriptionLog] = useState<any[]>([]); // Histórico separado
   const [elapsedTime, setElapsedTime] = useState<number>(0); // Cronômetro visual
-
+  const [viewingLog, setViewingLog] = useState<any | null>(null); // Armazena o log que está sendo lido
   // --- Funções de Carregamento e Persistência ---
 
   const loadPatientDataFromStorage = useCallback(() => {
@@ -1145,15 +1145,15 @@ const toggleRecordingHistory = useCallback(() => {
 }, []);
 
 
-// --- Auto-Start ---
 useEffect(() => {
-  if (consultationId && !isRecording && !isProcessing && !isPaused) {
+  // --- Auto-Start ---
+  if (consultationId && !isRecording && !isProcessing && !isPaused && !viewingLog) {
     const timer = setTimeout(() => {
       startAudioRecording();
     }, 1000);
     return () => clearTimeout(timer);
   }
-}, [consultationId, isRecording, isProcessing, isPaused, startAudioRecording]);
+}, [consultationId, isRecording, isProcessing, isPaused, startAudioRecording, viewingLog]);
 
   // --- Renderização ---
 
@@ -1279,117 +1279,204 @@ useEffect(() => {
         )}
       </div>
 
-<>
 {consultationId && (
-  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px", padding: "0 10px" }}>
+  <div style={{
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    marginTop: "10px",
+    padding: "0 10px",
+    position: "relative" // Importante para transições se quiser animar depois
+  }}>
 
-    {/* --- Controles (Botões) --- */}
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-      <button
-        onClick={togglePauseRecording}
-        disabled={(!isRecording && !isPaused) || isProcessing}
-        style={{
-          padding: "10px 15px",
-          backgroundColor: isRecording ? "#FFA500" : isPaused ? "#4CAF50" : "#cccccc",
-          color: "white", border: "none", borderRadius: "4px",
-          cursor: (isRecording || isPaused) ? "pointer" : "not-allowed",
-          flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
-        }}
-      >
-        {isRecording ? "⏸️ Pausar Gravação" : isPaused ? "▶️ Retomar Gravação" : "⏸️ Pausar/Retomar"}
-      </button>
-
-      <button
-        onClick={stopAudioRecording}
-        disabled={(!isRecording && !isPaused) || isProcessing}
-        style={{
-          padding: "10px 15px", backgroundColor: "#e66060", color: "white",
-          border: "none", borderRadius: "4px", cursor: "pointer", flex: 1
-        }}
-      >
-        ⏹️ Parar Gravação
-      </button>
-
-      <button
-        onClick={toggleRecordingHistory}
-        style={{
-          padding: "10px 15px", backgroundColor: "#2196F3", color: "white",
-          border: "none", borderRadius: "4px", cursor: "pointer"
-        }}
-      >
-        📋 Transcrições ({transcriptionLog.length})
-      </button>
-    </div>
-
-    {/* --- Status Messages --- */}
-    <div style={{ textAlign: "center" }}>
-      {isProcessing && (
-        <div style={{ color: "orange", fontWeight: "bold" }}>
-          ⏳ Processando e salvando áudio...
-        </div>
-      )}
-
-      {/* MUDANÇA: Mostra o tempo atualizando (0:01, 0:02...) */}
-      {isRecording && (
-        <div style={{ color: "#e66060", fontWeight: "bold" }}>
-          ● Gravando automaticamente... ({formatDuration(elapsedTime)})
-        </div>
-      )}
-
-      {/* MUDANÇA: Mensagem específica de pausa solicitada */}
-      {isPaused && (
-        <div style={{ color: "#FFA500", fontWeight: "bold" }}>
-          ⏸️ Gravação pausada - Clique em "Retomar" para continuar
-        </div>
-      )}
-
-      {hasRecordedAudio && !isRecording && !isPaused && (
-        <div style={{ color: "#4CAF50", fontWeight: "bold" }}>
-          ✓ Gravação finalizada e salva no histórico
-        </div>
-      )}
-    </div>
-
-    {/* --- Painel de Histórico Separado (Transcription Log) --- */}
-    {showRecordingHistory && (
+    {/* === MODO LEITURA (Arquivo Aberto) === */}
+    {viewingLog ? (
       <div style={{
-        border: "1px solid #ddd", borderRadius: "4px", padding: "10px",
-        backgroundColor: "#5e5e5eff", maxHeight: "250px", overflowY: "auto"
+        backgroundColor: "#2d2d2d", // Fundo escuro tipo editor
+        border: "1px solid #444",
+        borderRadius: "8px",
+        padding: "15px",
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+        minHeight: "300px",
+        animation: "fadeIn 0.2s" // Simples efeito visual
       }}>
-        <h4 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #777", paddingBottom: "5px" }}>
-             Log de Transcrições do Paciente
-        </h4>
-
-        {transcriptionLog.length === 0 ? (
-          <p style={{ margin: 0, color: "#ccc" }}>Nenhuma transcrição gravada para este paciente.</p>
-        ) : (
-          transcriptionLog.map((log) => (
-            <div key={log.id} style={{
-              padding: "8px", borderBottom: "1px solid #666", fontSize: "0.9em",
-              marginBottom: "5px", backgroundColor: "rgba(255,255,255,0.05)"
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', color: "#aaa", fontSize: "0.8em", marginBottom: "4px" }}>
-                <span>📅 {new Date(log.timestamp).toLocaleString()}</span>
-                <span>⏱ {log.duration}</span>
+        {/* Cabeçalho do Arquivo */}
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          borderBottom: "1px solid #555",
+          paddingBottom: "10px",
+          marginBottom: "5px"
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <span style={{ fontSize: "24px" }}>📄</span>
+            <div>
+              <div style={{ color: "#fff", fontWeight: "bold", fontSize: "0.9em" }}>
+                Transcrição de {new Date(viewingLog.timestamp).toLocaleDateString()}
               </div>
-
-              {/* Exibindo o ID da consulta para referência */}
-              <div style={{ fontSize: "0.75em", color: "#4CAF50", marginBottom: "4px" }}>
-                 Ref: {log.consultation_id === consultationId ? "(Atual) " : ""}
-                 {log.consultation_id ? log.consultation_id.slice(0, 8) : "N/A"}...
-              </div>
-
-              <div style={{ color: "#fff", fontStyle: "italic" }}>
-                "{log.text}"
+              <div style={{ color: "#aaa", fontSize: "0.8em" }}>
+                Horário: {new Date(viewingLog.timestamp).toLocaleTimeString()} • Duração: {viewingLog.duration}
               </div>
             </div>
-          ))
-        )}
+          </div>
+
+          <button
+            onClick={() => setViewingLog(null)}
+            style={{
+              background: "transparent",
+              border: "1px solid #666",
+              color: "#fff",
+              borderRadius: "4px",
+              cursor: "pointer",
+              padding: "5px 10px",
+              fontSize: "0.8em"
+            }}
+          >
+            ❌ Fechar Arquivo
+          </button>
+        </div>
+
+        {/* Conteúdo do Texto */}
+        <div style={{
+          flex: 1,
+          color: "#e0e0e0",
+          lineHeight: "1.5",
+          fontSize: "0.95em",
+          whiteSpace: "pre-wrap", // Preservar quebras de linha
+          overflowY: "auto",
+          padding: "5px",
+          backgroundColor: "#1e1e1e",
+          borderRadius: "4px",
+          border: "1px solid #333"
+        }}>
+          {viewingLog.text}
+        </div>
+
+        <div style={{ textAlign: "right", fontSize: "0.75em", color: "#666" }}>
+          ID Ref: {viewingLog.consultation_id}
+        </div>
       </div>
+    ) : (
+
+      /* === MODO GRAVAÇÃO E LISTA (Padrão) === */
+      <>
+        {/* Controles de Gravação (Só aparecem se não estiver lendo) */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+          <button
+            onClick={togglePauseRecording}
+            disabled={(!isRecording && !isPaused) || isProcessing}
+            style={{
+              padding: "10px 15px",
+              backgroundColor: isRecording ? "#FFA500" : isPaused ? "#4CAF50" : "#cccccc",
+              color: "white", border: "none", borderRadius: "4px",
+              cursor: (isRecording || isPaused) ? "pointer" : "not-allowed",
+              flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
+            }}
+          >
+            {isRecording ? "⏸️ Pausar" : isPaused ? "▶️ Retomar" : "⏸️ Pausar/Retomar"}
+          </button>
+
+          <button
+            onClick={stopAudioRecording}
+            disabled={(!isRecording && !isPaused) || isProcessing}
+            style={{
+              padding: "10px 15px", backgroundColor: "#e66060", color: "white",
+              border: "none", borderRadius: "4px", cursor: "pointer", flex: 1
+            }}
+          >
+            ⏹️ Parar
+          </button>
+
+          <button
+            onClick={toggleRecordingHistory}
+            style={{
+              padding: "10px 15px", backgroundColor: showRecordingHistory ? "#1976D2" : "#2196F3", color: "white",
+              border: "none", borderRadius: "4px", cursor: "pointer"
+            }}
+          >
+            {showRecordingHistory ? "📂 Ocultar Arq." : "📂 Transcrições"} ({transcriptionLog.length})
+          </button>
+        </div>
+
+        {/* Status Messages */}
+        <div style={{ textAlign: "center" }}>
+          {isProcessing && <div style={{ color: "orange", fontWeight: "bold" }}>⏳ Processando...</div>}
+          {isRecording && <div style={{ color: "#e66060", fontWeight: "bold" }}>● Gravando... ({formatDuration(elapsedTime)})</div>}
+          {isPaused && <div style={{ color: "#FFA500", fontWeight: "bold" }}>⏸️ Pausado</div>}
+          {hasRecordedAudio && !isRecording && !isPaused && <div style={{ color: "#4CAF50", fontWeight: "bold" }}>✓ Arquivo salvo</div>}
+        </div>
+
+        {/* Painel de Arquivos (Lista de Ícones) */}
+        {showRecordingHistory && (
+          <div style={{
+            border: "1px solid #ddd", borderRadius: "4px", padding: "10px",
+            backgroundColor: "#5e5e5eff", maxHeight: "250px", overflowY: "auto"
+          }}>
+            <h4 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #777", paddingBottom: "5px", color: "#fff" }}>
+                 Arquivos de Transcrição
+            </h4>
+
+            {transcriptionLog.length === 0 ? (
+              <p style={{ margin: 0, color: "#ccc", fontStyle: "italic" }}>Nenhum arquivo encontrado.</p>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: "10px" }}>
+                {transcriptionLog.map((log) => (
+                  <div
+                    key={log.id}
+                    onClick={() => {
+                        // Ao clicar no arquivo:
+                        // 1. Se estiver gravando, PAUSA para o usuário ler em paz
+                        if (isRecording) togglePauseRecording();
+                        // 2. Abre o modo leitura
+                        setViewingLog(log);
+                    }}
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.1)",
+                      border: "1px solid #666",
+                      borderRadius: "6px",
+                      padding: "10px",
+                      cursor: "pointer",
+                      transition: "background 0.2s",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      textAlign: "center",
+                      gap: "5px"
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.2)"}
+                    onMouseOut={(e) => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"}
+                  >
+                    {/* Ícone de Arquivo */}
+                    <div style={{ fontSize: "2rem" }}>📄</div>
+
+                    <div style={{ color: "#fff", fontWeight: "bold", fontSize: "0.85em" }}>
+                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+
+                    <div style={{ color: "#bbb", fontSize: "0.75em" }}>
+                      {new Date(log.timestamp).toLocaleDateString()}
+                    </div>
+
+                    <div style={{
+                        backgroundColor: "#4CAF50", color: "white",
+                        borderRadius: "10px", padding: "2px 8px",
+                        fontSize: "0.7em", marginTop: "2px"
+                    }}>
+                      {log.duration}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </>
     )}
   </div>
 )}
-</>
       {/* Main Chat Area */}
       <div className="chat-container">
         <Chat
