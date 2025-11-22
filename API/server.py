@@ -19,8 +19,9 @@ from backend.patient_db import (
     load_database, save_database, generate_patient_id, get_patient_data, 
     get_all_patients_info, ensure_patient_exists, get_patient_chat_history, 
     add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
-    get_consultation_chat_history, add_message_to_consultation_history
-)
+    get_consultation_chat_history, add_message_to_consultation_history, add_transcription_log_to_patient,
+    get_patient_transcription_log
+    )
 from backend.processador_voz.processador_voz import TranscritorVoz
 
 app = Flask(__name__)
@@ -73,56 +74,96 @@ def diarize_audio_route():
 @app.route('/api/transcribe_audio', methods=['POST'])
 def transcribe_audio_route():
     """
-    Recebe um arquivo de áudio (preferencialmente WAV) no campo 'audio_file'
-    e utiliza o módulo `processador_voz.TranscritorVoz` para transcrever o áudio.
-    Retorna JSON com o texto transcrito.
+    Recebe um arquivo de áudio, processa a transcrição e salva no histórico
+    de logs de transcrição do paciente (separado do chat).
     """
     try:
+        # 1. Validação do Arquivo
         if 'audio_file' not in request.files:
-            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado (esperado 'audio_file' no form-data)."}), 400
+            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado."}), 400
 
         audio_file = request.files['audio_file']
-        
+
         if audio_file.filename == '':
             return jsonify({"status": "error", "message": "Arquivo de áudio vazio."}), 400
 
-        print(f"[TRANSCRIÇÃO] Processando arquivo: {audio_file.filename}")
+        # 2. Captura e Validação dos IDs e Metadados (NOVAS MUDANÇAS)
+        patient_id = request.form.get('patient_id')
+        consultation_id = request.form.get('consultation_id')
+        # Tenta pegar a duração enviada pelo front, ou define 0 para calcular depois
+        duration_input = request.form.get('duration', 0.0, type=float)
 
-        # Salva temporariamente o arquivo recebido com a extensão adequada
+        if not patient_id or not consultation_id:
+            return jsonify({"status": "error", "message": "IDs de paciente e consulta são obrigatórios."}), 400
+
+        print(f"[TRANSCRIÇÃO] Processando arquivo: {audio_file.filename} | Paciente: {patient_id[:8]}...")
+
+        # 3. Salvamento Temporário
         file_ext = '.wav'
         if audio_file.filename and '.' in audio_file.filename:
             file_ext = '.' + audio_file.filename.split('.')[-1]
-            
+
         with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
             tmp_path = tmp.name
             audio_file.save(tmp_path)
             print(f"[TRANSCRIÇÃO] Arquivo salvo temporariamente em: {tmp_path}")
 
         try:
-            # Utiliza o TranscritorVoz para transcrever
+            # 4. Processamento com TranscritorVoz
             print(f"[TRANSCRIÇÃO] Iniciando transcrição com TranscritorVoz...")
             transcritor = TranscritorVoz(idioma="pt-BR")
-            
+
             with sr.AudioFile(tmp_path) as source:
                 audio_data = transcritor.reconhecedor.record(source)
-                print(f"[TRANSCRIÇÃO] Áudio carregado da fonte. Duration: {len(audio_data.frame_data) / audio_data.sample_rate:.2f}s")
+                # Se o front não mandou duração precisa, calculamos uma estimativa aqui
+                calculated_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
+                print(f"[TRANSCRIÇÃO] Áudio carregado. Duration calc: {calculated_duration:.2f}s")
+
+            # Define a duração final a ser salva (prioriza a do áudio real se a do front for 0)
+            final_duration = calculated_duration if duration_input == 0 else duration_input
 
             texto = transcritor.transcrever(audio_data)
             print(f"[TRANSCRIÇÃO] Transcrição concluída: {texto[:100]}...")
 
             # Remove arquivo temporário
             os.remove(tmp_path)
-            
+
+            # 5. Verificação de Erros de Reconhecimento (Silêncio ou Ruído)
+            invalid_phrases = [
+                "Não foi possível entender o áudio",
+                "Erro na API de reconhecimento de fala"
+            ]
+            # Verifica se o texto retornado contém alguma frase de erro
+            if any(phrase in texto for phrase in invalid_phrases):
+                # Retorna status success (para não dar erro HTTP), mas com flag de erro lógico
+                return jsonify({
+                    "status": "success",
+                    "transcription": texto,
+                    "is_error": True
+                }), 200
+
+            # 6. Salvar no Histórico Separado de Transcrições (NOVA MUDANÇA)
+            # Chama a função que adiciona ao 'transcription_log' no JSON
+            log_entry = add_transcription_log_to_patient(
+                patient_id=patient_id,
+                consultation_id=consultation_id,
+                text=texto,
+                duration_seconds=final_duration
+            )
+
+            # Retorna o log_entry para o frontend atualizar a lista sem recarregar
             return jsonify({
                 "status": "success",
-                "transcription": texto
+                "transcription": texto,
+                "consultation_id": consultation_id,
+                "log_entry": log_entry,
+                "is_error": False
             }), 200
-            
+
         except Exception as e:
             print(f"[TRANSCRIÇÃO] Erro durante processamento: {e}")
             import traceback
             traceback.print_exc()
-            # Remove arquivo temporário em caso de erro
             if os.path.exists(tmp_path):
                 os.remove(tmp_path)
             raise
@@ -133,6 +174,35 @@ def transcribe_audio_route():
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno ao transcrever áudio: {e}"}), 500
 
+
+# Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
+@app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
+def get_transcription_log_api(patient_id):
+    """
+    Retorna o histórico detalhado de transcrições de áudio.
+    """
+    try:
+        # CORREÇÃO AQUI:
+        # Em vez de chamar a outra rota, verificamos o banco diretamente.
+        # Isso evita o erro de tupla e é mais performático.
+        patient_data = get_patient_data(patient_id)
+
+        if not patient_data:
+            return jsonify({"status": "error", "message": "Paciente não encontrado."}), 404
+
+        # Busca os logs usando a função helper do banco de dados
+        logs = get_patient_transcription_log(patient_id)
+
+        return jsonify({
+            "status": "success",
+            "logs": logs,
+            "count": len(logs)
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro ao recuperar logs de transcrição: {e}"}), 500
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
 def check_patient_exists_api(patient_id):

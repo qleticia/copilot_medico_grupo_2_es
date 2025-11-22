@@ -38,12 +38,7 @@ type ConsultationListItem = {
   date: string;
 };
 
-type RecordingHistoryItem = {
-  id: string;
-  timestamp: string;
-  duration: string;
-  transcription?: string;
-};
+
 
 // --- Componente Principal App ---
 function App() {
@@ -71,17 +66,17 @@ function App() {
   // --- Estados para controle de gravação ---
   const [isRecording, setIsRecording] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [hasRecordedAudio, setHasRecordedAudio] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [recordingHistory, setRecordingHistory] = useState<RecordingHistoryItem[]>([]);
   const [showRecordingHistory, setShowRecordingHistory] = useState<boolean>(false);
-
+  const [hasRecordedAudio, setHasRecordedAudio] = useState<boolean>(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const audioBlobRef = useRef<Blob | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const recordingDurationRef = useRef<number>(0);
+  const [transcriptionLog, setTranscriptionLog] = useState<any[]>([]); // Histórico separado
+  const [elapsedTime, setElapsedTime] = useState<number>(0); // Cronômetro visual
 
   // --- Funções de Carregamento e Persistência ---
 
@@ -828,279 +823,337 @@ function App() {
     }
   }, [selectorInput]);
 
-  // --- Funções de Gravação de Áudio ---
+// --- EFEITO 1: LIMPEZA DE ESTADO ---
+useEffect(() => {
+  return () => {
+    console.log("🔄 Trocando de contexto/consulta. Limpando gravador...");
 
-  // --- Helper functions para conversão de áudio ---
-  const audioBufferToWavBlob = useCallback((audioBuffer: AudioBuffer) => {
-    const numOfChan = audioBuffer.numberOfChannels;
-    const length = audioBuffer.length * numOfChan * 2 + 44;
-    const buffer = new ArrayBuffer(length);
-    const view = new DataView(buffer);
-    const channels: Float32Array[] = [];
-    for (let i = 0; i < numOfChan; i++) {
-      channels.push(audioBuffer.getChannelData(i));
-    }
-    /* RIFF identifier */ writeString(view, 0, "RIFF");
-    /* file length */ view.setUint32(4, 36 + audioBuffer.length * numOfChan * 2, true);
-    /* RIFF type */ writeString(view, 8, "WAVE");
-    /* format chunk identifier */ writeString(view, 12, "fmt ");
-    /* format chunk length */ view.setUint32(16, 16, true);
-    /* sample format (raw) */ view.setUint16(20, 1, true);
-    /* channel count */ view.setUint16(22, numOfChan, true);
-    /* sample rate */ view.setUint32(24, audioBuffer.sampleRate, true);
-    /* byte rate */ view.setUint32(28, audioBuffer.sampleRate * numOfChan * 2, true);
-    /* block align */ view.setUint16(32, numOfChan * 2, true);
-    /* bits per sample */ view.setUint16(34, 16, true);
-    /* data chunk identifier */ writeString(view, 36, "data");
-    /* data chunk length */ view.setUint32(40, audioBuffer.length * numOfChan * 2, true);
-    let offset = 44;
-    for (let i = 0; i < audioBuffer.length; i++) {
-      for (let channel = 0; channel < numOfChan; channel++) {
-        let sample = Math.max(-1, Math.min(1, channels[channel][i]));
-        sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
-        view.setInt16(offset, sample, true);
-        offset += 2;
-      }
-    }
-    return new Blob([view], { type: "audio/wav" });
-  }, []);
-
-  const writeString = (view: DataView, offset: number, str: string) => {
-    for (let i = 0; i < str.length; i++) {
-      view.setUint8(offset + i, str.charCodeAt(i));
-    }
-  };
-
-  // --- Envio do áudio para o servidor ---
-  const sendAudioToServer = useCallback(async (wavBlob: Blob, saveToHistory: boolean = true) => {
-    try {
-      const form = new FormData();
-      const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
-      form.append("audio_file", file);
-
-      const resp = await fetch(`${SERVER_URL}/api/transcribe_audio`, {
-        method: "POST",
-        body: form,
-      });
-
-      if (!resp.ok) {
-        throw new Error(`Erro no servidor: ${resp.statusText}`);
-      }
-
-      const data = await resp.json();
-
-      const invalidPhrases = [
-          "Não foi possível entender o áudio",
-          "Não foi possível entender o áudio.",
-          "Erro na API de reconhecimento de fala"
-      ];
-
-      if (data && data.transcription) {
-          const texto = String(data.transcription).trim();
-          const ehErro = invalidPhrases.some(phrase => texto.includes(phrase));
-
-          if (!ehErro && texto.length > 0) {
-            // Se deve salvar no histórico, adiciona ao histórico de gravações
-            if (saveToHistory) {
-              const recordingItem: RecordingHistoryItem = {
-                id: Date.now().toString(),
-                timestamp: new Date().toISOString(),
-                duration: formatDuration(recordingDurationRef.current),
-                transcription: texto
-              };
-              setRecordingHistory(prev => [recordingItem, ...prev]);
-            }
-            
-            await handleSendMessage(texto);
-            
-          } else {
-            setMessages(prev => [...prev, {
-              id: Date.now(),
-              text: "❌ Não foi possível transcrever o áudio. Tente falar mais claro ou aumentar o volume.",
-              sender: "bot",
-              timestamp: new Date().toISOString()
-            }]);
-          }
-      }
-    } catch (err) {
-      console.error("Erro ao enviar áudio para o servidor:", err);
-      setMessages(prev => [...prev, {
-        id: Date.now(),
-        text: "❌ Erro ao enviar áudio. Verifique sua conexão.",
-        sender: "bot",
-        timestamp: new Date().toISOString()
-      }]);
-    }
-  }, [handleSendMessage]);
-
-  // --- Função para formatar duração ---
-  const formatDuration = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // --- Processamento de Áudio ---
-  const processAndSendAudio = useCallback(async (blob: Blob, saveToHistory: boolean = true) => {
-    if (blob.size < 1000) {
-      console.log("Áudio muito curto, ignorando...");
-      return;
-    }
-
-    try {
-      const arrayBuffer = await blob.arrayBuffer();
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioCtx();
-      const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-      const wavBlob = audioBufferToWavBlob(decodedBuffer);
-
-      // Envia o áudio ao servidor
-      await sendAudioToServer(wavBlob, saveToHistory);
-
-      if (audioCtx.state !== 'closed') await audioCtx.close();
-    } catch (err) {
-      console.error("Erro ao processar áudio:", err);
-      throw err;
-    }
-  }, [audioBufferToWavBlob, sendAudioToServer]);
-
-  // --- Função para iniciar gravação ---
-  const startAudioRecording = useCallback(async () => {
-    try {
-      if (isProcessing || isRecording || isPaused) return;
-
-      console.log("🎤 Iniciando gravação automática...");
-      
-      // Inicie uma nova gravação
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-      chunksRef.current = [];
-      audioBlobRef.current = null;
-
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          chunksRef.current.push(e.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        console.log("⏹️ Gravação parada");
-        
-        // Calcula duração total
-        recordingDurationRef.current = (Date.now() - recordingStartTimeRef.current) / 1000;
-        
-        // Cria o blob final
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
-        audioBlobRef.current = blob;
-        
-        if (blob.size > 1000) {
-          setHasRecordedAudio(true);
-          console.log("✅ Áudio gravado e pronto");
-          
-          // Salva automaticamente no histórico
-          const recordingItem: RecordingHistoryItem = {
-            id: Date.now().toString(),
-            timestamp: new Date().toISOString(),
-            duration: formatDuration(recordingDurationRef.current),
-            transcription: "Processando..."
-          };
-          setRecordingHistory(prev => [recordingItem, ...prev]);
-          
-          // Processa automaticamente para transcrição
-          setIsProcessing(true);
-          try {
-            await processAndSendAudio(blob, false);
-          } catch (error) {
-            console.error("Erro ao processar áudio:", error);
-          } finally {
-            setIsProcessing(false);
-          }
-        } else {
-          console.log("Áudio muito curto, ignorando...");
-          setHasRecordedAudio(false);
-          audioBlobRef.current = null;
-        }
-
-        // Limpeza
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
-        }
-        chunksRef.current = [];
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-      setIsPaused(false);
-      setHasRecordedAudio(false);
-      recordingStartTimeRef.current = Date.now();
-      recordingDurationRef.current = 0;
-      
-    } catch (error: any) {
-      console.error("Erro ao iniciar gravação:", error);
-      let errorMessage = "Erro ao acessar o microfone.";
-      
-      if (error.name === "NotAllowedError") {
-        errorMessage = "Permissão de microfone negada. Por favor, permita o acesso ao microfone.";
-      } else if (error.name === "NotFoundError") {
-        errorMessage = "Nenhum microfone encontrado.";
-      }
-      
-      setMessages(prev => [...prev, {
-        id: Date.now(),
-        text: errorMessage,
-        sender: "bot",
-        timestamp: new Date().toISOString()
-      }]);
-    }
-  }, [isProcessing, isRecording, isPaused, processAndSendAudio]);
-
-  // --- Função para pausar gravação ---
-  const togglePauseRecording  = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording && !isPaused) {
-      // Pausar gravação
-      mediaRecorderRef.current.pause();
-      setIsRecording(false);
-      setIsPaused(true);
-      recordingDurationRef.current += (Date.now() - recordingStartTimeRef.current) / 1000;
-      console.log("⏸️ Gravação pausada");
-    } else if (mediaRecorderRef.current && !isRecording && isPaused) {
-      // Retomar gravação
-      mediaRecorderRef.current.resume();
-      setIsRecording(true);
-      setIsPaused(false);
-      recordingStartTimeRef.current = Date.now();
-      console.log("▶️ Gravação retomada");
-    }
-  }, [isRecording, isPaused]);
-
-  // --- Função para parar gravação (finalizar) ---
-  const stopAudioRecording = useCallback(() => {
-    if (mediaRecorderRef.current && (isRecording || isPaused)) {
+    // 1. Para o Hardware
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsPaused(false);
-      console.log("⏹️ Gravação finalizada");
     }
-  }, [isRecording, isPaused]);
-
-  // --- Função para ver histórico de gravações ---
-  const toggleRecordingHistory = useCallback(() => {
-    setShowRecordingHistory(prev => !prev);
-  }, []);
-
-  useEffect(() => {
-    if (consultationId && !isRecording && !isProcessing && !isPaused) {
-      const timer = setTimeout(() => {
-        startAudioRecording();
-      }, 1000);
-      
-      return () => clearTimeout(timer);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
     }
-  }, [consultationId, isRecording, isProcessing, isPaused, startAudioRecording]);
+
+    // 2. Reseta Referências
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    audioBlobRef.current = null;
+    recordingDurationRef.current = 0;
+
+    // 3. Reseta Estados Visuais
+    setIsRecording(false);
+    setIsPaused(false);
+    setIsProcessing(false);
+    setHasRecordedAudio(false);
+    setElapsedTime(0); // Zera o relógio visual
+  };
+}, [consultationId]);
+
+// --- EFEITO 2: CARREGAR HISTÓRICO DE TRANSCRIÇÕES ---
+useEffect(() => {
+  if (patientId) {
+    fetch(`${SERVER_URL}/api/patients/${patientId}/transcription-log`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'success') {
+          setTranscriptionLog(data.logs);
+        }
+      })
+      .catch(err => console.error("Erro ao carregar log de transcrições:", err));
+  } else {
+    setTranscriptionLog([]);
+  }
+}, [patientId]);
+
+// --- EFEITO 3: CRONÔMETRO VISUAL (Atualiza a cada segundo) ---
+useEffect(() => {
+  let interval: any;
+
+  if (isRecording && !isPaused) {
+    interval = setInterval(() => {
+      // Calcula o tempo total: acumulado anterior + tempo da sessão atual
+      const currentSessionTime = (Date.now() - recordingStartTimeRef.current) / 1000;
+      setElapsedTime(recordingDurationRef.current + currentSessionTime);
+    }, 1000);
+  }
+
+  return () => clearInterval(interval);
+}, [isRecording, isPaused]);
+
+
+// --- FUNÇÕES AUXILIARES ---
+
+const formatDuration = (seconds: number): string => {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60); // Math.floor garante que não mostre decimais
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
+
+const audioBufferToWavBlob = useCallback((audioBuffer: AudioBuffer) => {
+  const numOfChan = audioBuffer.numberOfChannels;
+  const length = audioBuffer.length * numOfChan * 2 + 44;
+  const buffer = new ArrayBuffer(length);
+  const view = new DataView(buffer);
+  const channels: Float32Array[] = [];
+  for (let i = 0; i < numOfChan; i++) {
+    channels.push(audioBuffer.getChannelData(i));
+  }
+  writeString(view, 0, "RIFF");
+  view.setUint32(4, 36 + audioBuffer.length * numOfChan * 2, true);
+  writeString(view, 8, "WAVE");
+  writeString(view, 12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numOfChan, true);
+  view.setUint32(24, audioBuffer.sampleRate, true);
+  view.setUint32(28, audioBuffer.sampleRate * numOfChan * 2, true);
+  view.setUint16(32, numOfChan * 2, true);
+  view.setUint16(34, 16, true);
+  writeString(view, 36, "data");
+  view.setUint32(40, audioBuffer.length * numOfChan * 2, true);
+  let offset = 44;
+  for (let i = 0; i < audioBuffer.length; i++) {
+    for (let channel = 0; channel < numOfChan; channel++) {
+      let sample = Math.max(-1, Math.min(1, channels[channel][i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
+  }
+  return new Blob([view], { type: "audio/wav" });
+}, []);
+
+const writeString = (view: DataView, offset: number, str: string) => {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+};
+
+// --- Envio do áudio para o servidor ---
+const sendAudioToServer = useCallback(async (wavBlob: Blob, duration: number) => {
+  try {
+    if (!patientId || !consultationId) {
+        console.error("IDs ausentes para envio de áudio.");
+        return;
+    }
+
+    const form = new FormData();
+    const file = new File([wavBlob], "recording.wav", { type: "audio/wav" });
+    form.append("audio_file", file);
+    form.append("patient_id", patientId);
+    form.append("consultation_id", consultationId);
+    form.append("duration", duration.toString());
+
+    const resp = await fetch(`${SERVER_URL}/api/transcribe_audio`, {
+      method: "POST",
+      body: form,
+    });
+
+    if (!resp.ok) throw new Error(`Erro no servidor: ${resp.statusText}`);
+
+    const data = await resp.json();
+
+    const invalidPhrases = [
+        "Não foi possível entender o áudio",
+        "Não foi possível entender o áudio.",
+        "Erro na API de reconhecimento de fala"
+    ];
+
+    if (data && data.transcription && !data.is_error) {
+        const texto = String(data.transcription).trim();
+        const ehErro = invalidPhrases.some(phrase => texto.includes(phrase));
+
+        if (!ehErro && texto.length > 0) {
+          // Atualiza lista visual de logs
+          if (data.log_entry) {
+             setTranscriptionLog(prev => [data.log_entry, ...prev]);
+          }
+          // Envia transcrição para o fluxo de chat
+          await handleSendMessage(texto);
+        } else {
+          setMessages(prev => [...prev, {
+            id: Date.now(),
+            text: "❌ Não foi possível transcrever o áudio. Tente falar mais claro.",
+            sender: "bot",
+            timestamp: new Date().toISOString()
+          }]);
+        }
+    }
+  } catch (err) {
+    console.error("Erro ao enviar áudio:", err);
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      text: "❌ Erro ao enviar áudio. Verifique sua conexão.",
+      sender: "bot",
+      timestamp: new Date().toISOString()
+    }]);
+  }
+}, [handleSendMessage, patientId, consultationId]);
+
+
+// --- Processamento de Áudio ---
+const processAndSendAudio = useCallback(async (blob: Blob, duration: number) => {
+  if (blob.size < 1000) {
+    console.log("Áudio muito curto, ignorando...");
+    return;
+  }
+  try {
+    const arrayBuffer = await blob.arrayBuffer();
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const audioCtx = new AudioCtx();
+    const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    const wavBlob = audioBufferToWavBlob(decodedBuffer);
+
+    await sendAudioToServer(wavBlob, duration);
+
+    if (audioCtx.state !== 'closed') await audioCtx.close();
+  } catch (err) {
+    console.error("Erro ao processar áudio:", err);
+    throw err;
+  }
+}, [audioBufferToWavBlob, sendAudioToServer]);
+
+
+// --- Função para iniciar gravação (Com DELAY Anti-Alucinação) ---
+const startAudioRecording = useCallback(async () => {
+  try {
+    if (isProcessing || isRecording || isPaused) return;
+    if (!consultationId) return;
+
+    console.log("🎤 Preparando gravação automática...");
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    streamRef.current = stream;
+
+    const mediaRecorder = new MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    chunksRef.current = [];
+    audioBlobRef.current = null;
+
+    // Reseta contadores antes de começar
+    setElapsedTime(0);
+    recordingStartTimeRef.current = Date.now();
+    recordingDurationRef.current = 0;
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+
+    mediaRecorder.onstop = async () => {
+      console.log("⏹️ Gravação parada");
+
+      const finalDuration = recordingDurationRef.current;
+      const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+      audioBlobRef.current = blob;
+
+      if (blob.size > 1000) {
+        setHasRecordedAudio(true);
+        console.log(`✅ Áudio gravado. Duração: ${formatDuration(finalDuration)}`);
+
+        setIsProcessing(true);
+        try {
+          await processAndSendAudio(blob, finalDuration);
+        } catch (error) {
+          console.error("Erro ao processar:", error);
+        } finally {
+          setIsProcessing(false);
+        }
+      } else {
+        console.log("Áudio muito curto...");
+        setHasRecordedAudio(false);
+        audioBlobRef.current = null;
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+      chunksRef.current = [];
+    };
+
+    // --- CORREÇÃO DE ALUCINAÇÃO: Pequeno delay de 200ms ---
+    setTimeout(() => {
+        if (mediaRecorder.state === "inactive") {
+            mediaRecorder.start();
+            setIsRecording(true);
+            setIsPaused(false);
+            setHasRecordedAudio(false);
+
+            // Define o tempo inicial real AGORA, após o delay
+            recordingStartTimeRef.current = Date.now();
+            recordingDurationRef.current = 0;
+            setElapsedTime(0);
+        }
+    }, 200);
+
+  } catch (error: any) {
+    console.error("Erro ao iniciar gravação:", error);
+    let errorMessage = "Erro ao acessar o microfone.";
+    if (error.name === "NotAllowedError") errorMessage = "Permissão de microfone negada.";
+    setMessages(prev => [...prev, { id: Date.now(), text: errorMessage, sender: "bot", timestamp: new Date().toISOString() }]);
+  }
+}, [isProcessing, isRecording, isPaused, processAndSendAudio, consultationId]);
+
+
+// --- Função para pausar gravação ---
+const togglePauseRecording  = useCallback(() => {
+  if (mediaRecorderRef.current && isRecording && !isPaused) {
+    // PAUSAR
+    mediaRecorderRef.current.pause();
+    setIsRecording(false);
+    setIsPaused(true);
+    // Congela a duração acumulada até agora
+    recordingDurationRef.current += (Date.now() - recordingStartTimeRef.current) / 1000;
+    console.log("⏸️ Gravação pausada");
+
+  } else if (mediaRecorderRef.current && !isRecording && isPaused) {
+    // RETOMAR
+    mediaRecorderRef.current.resume();
+    setIsRecording(true);
+    setIsPaused(false);
+    // Reinicia o "ponto de partida" do segmento atual
+    recordingStartTimeRef.current = Date.now();
+    console.log("▶️ Gravação retomada");
+  }
+}, [isRecording, isPaused]);
+
+
+// --- Função para parar gravação ---
+const stopAudioRecording = useCallback(() => {
+  if (mediaRecorderRef.current && (isRecording || isPaused)) {
+    // Se estava gravando, soma o último segmento
+    if (!isPaused) {
+       recordingDurationRef.current += (Date.now() - recordingStartTimeRef.current) / 1000;
+    }
+    // Para forçado o relógio visual no valor final
+    setElapsedTime(recordingDurationRef.current);
+
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+    setIsPaused(false);
+    console.log("⏹️ Gravação finalizada manualmente");
+  }
+}, [isRecording, isPaused]);
+
+
+// --- Função para ver histórico ---
+const toggleRecordingHistory = useCallback(() => {
+  setShowRecordingHistory(prev => !prev);
+}, []);
+
+
+// --- Auto-Start ---
+useEffect(() => {
+  if (consultationId && !isRecording && !isProcessing && !isPaused) {
+    const timer = setTimeout(() => {
+      startAudioRecording();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }
+}, [consultationId, isRecording, isProcessing, isPaused, startAudioRecording]);
 
   // --- Renderização ---
 
@@ -1226,150 +1279,117 @@ function App() {
         )}
       </div>
 
-      {/* Controles de Gravação de Áudio */}
-      {consultationId && (
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          gap: "10px",
-          marginTop: "10px",
-          padding: "0 10px",
-        }}>
-          {/* Linha 1: Controles principais */}
-          <div style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "10px"
-          }}>
-            {/* Botão de Pausar/Retomar */}
-            <button
-              onClick={togglePauseRecording}
-              disabled={(!isRecording && !isPaused) || isProcessing}
-              style={{
-                padding: "10px 15px",
-                backgroundColor: isRecording ? "#FFA500" : 
-                              isPaused ? "#4CAF50" : "#cccccc",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: (isRecording || isPaused) ? "pointer" : "not-allowed",
-                flex: 1,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "5px"
-              }}
-            >
-              {isRecording ? (
-                <>
-                  ⏸️ Pausar Gravação
-                </>
-              ) : isPaused ? (
-                <>
-                  ▶️ Retomar Gravação
-                </>
-              ) : (
-                <>
-                  ⏸️ Pausar/Retomar
-                </>
-              )}
-            </button>
+<>
+{consultationId && (
+  <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px", padding: "0 10px" }}>
 
-            {/* Botão de Parar (finalizar) */}
-            <button
-              onClick={stopAudioRecording}
-              disabled={(!isRecording && !isPaused) || isProcessing}
-              style={{
-                padding: "10px 15px",
-                backgroundColor: "#e66060",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer",
-                flex: 1
-              }}
-            >
-              ⏹️ Parar Gravação
-            </button>
+    {/* --- Controles (Botões) --- */}
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
+      <button
+        onClick={togglePauseRecording}
+        disabled={(!isRecording && !isPaused) || isProcessing}
+        style={{
+          padding: "10px 15px",
+          backgroundColor: isRecording ? "#FFA500" : isPaused ? "#4CAF50" : "#cccccc",
+          color: "white", border: "none", borderRadius: "4px",
+          cursor: (isRecording || isPaused) ? "pointer" : "not-allowed",
+          flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "5px"
+        }}
+      >
+        {isRecording ? "⏸️ Pausar Gravação" : isPaused ? "▶️ Retomar Gravação" : "⏸️ Pausar/Retomar"}
+      </button>
 
-            {/* Botão Histórico */}
-            <button
-              onClick={toggleRecordingHistory}
-              style={{
-                padding: "10px 15px",
-                backgroundColor: "#2196F3",
-                color: "white",
-                border: "none",
-                borderRadius: "4px",
-                cursor: "pointer"
-              }}
-            >
-              📋 Histórico
-            </button>
-          </div>
+      <button
+        onClick={stopAudioRecording}
+        disabled={(!isRecording && !isPaused) || isProcessing}
+        style={{
+          padding: "10px 15px", backgroundColor: "#e66060", color: "white",
+          border: "none", borderRadius: "4px", cursor: "pointer", flex: 1
+        }}
+      >
+        ⏹️ Parar Gravação
+      </button>
 
-          {/* Linha 2: Indicadores de status */}
-          <div style={{ textAlign: "center" }}>
-            {isProcessing && (
-              <div style={{ color: "orange", fontWeight: "bold" }}>
-                ⏳ Processando áudio...
-              </div>
-            )}
-            {isRecording && (
-              <div style={{ color: "#e66060", fontWeight: "bold" }}>
-                ● Gravando automaticamente...
-              </div>
-            )}
-            {isPaused && (
-              <div style={{ color: "#FFA500", fontWeight: "bold" }}>
-                ⏸️ Gravação pausada - Clique em "Retomar" para continuar
-              </div>
-            )}
-            {hasRecordedAudio && !isRecording && !isPaused && (
-              <div style={{ color: "#4CAF50", fontWeight: "bold" }}>
-                ✓ Gravação finalizada e salva no histórico
-              </div>
-            )}
-          </div>
+      <button
+        onClick={toggleRecordingHistory}
+        style={{
+          padding: "10px 15px", backgroundColor: "#2196F3", color: "white",
+          border: "none", borderRadius: "4px", cursor: "pointer"
+        }}
+      >
+        📋 Transcrições ({transcriptionLog.length})
+      </button>
+    </div>
 
-          {/* Histórico de Gravações */}
-          {showRecordingHistory && (
-            <div style={{
-              border: "1px solid #ddd",
-              borderRadius: "4px",
-              padding: "10px",
-              backgroundColor: "#5e5e5eff",
-              maxHeight: "200px",
-              overflowY: "auto"
-            }}>
-              <h4 style={{ margin: "0 0 10px 0" }}>Histórico de Gravações</h4>
-              {recordingHistory.length === 0 ? (
-                <p style={{ margin: 0, color: "#666" }}>Nenhuma gravação ainda</p>
-              ) : (
-                recordingHistory.map(recording => (
-                  <div key={recording.id} style={{
-                    padding: "8px",
-                    borderBottom: "1px solid #eee",
-                    fontSize: "0.9em"
-                  }}>
-                    <div style={{ fontWeight: "bold" }}>
-                      {new Date(recording.timestamp).toLocaleTimeString("pt-BR")}
-                      <span style={{ marginLeft: "10px", color: "#666", fontSize: "0.8em" }}>
-                        Duração: {recording.duration}
-                      </span>
-                    </div>
-                    <div style={{ color: "#333", marginTop: "4px" }}>
-                      {recording.transcription || "Transcrição pendente..."}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          )}
+    {/* --- Status Messages --- */}
+    <div style={{ textAlign: "center" }}>
+      {isProcessing && (
+        <div style={{ color: "orange", fontWeight: "bold" }}>
+          ⏳ Processando e salvando áudio...
         </div>
       )}
 
+      {/* MUDANÇA: Mostra o tempo atualizando (0:01, 0:02...) */}
+      {isRecording && (
+        <div style={{ color: "#e66060", fontWeight: "bold" }}>
+          ● Gravando automaticamente... ({formatDuration(elapsedTime)})
+        </div>
+      )}
+
+      {/* MUDANÇA: Mensagem específica de pausa solicitada */}
+      {isPaused && (
+        <div style={{ color: "#FFA500", fontWeight: "bold" }}>
+          ⏸️ Gravação pausada - Clique em "Retomar" para continuar
+        </div>
+      )}
+
+      {hasRecordedAudio && !isRecording && !isPaused && (
+        <div style={{ color: "#4CAF50", fontWeight: "bold" }}>
+          ✓ Gravação finalizada e salva no histórico
+        </div>
+      )}
+    </div>
+
+    {/* --- Painel de Histórico Separado (Transcription Log) --- */}
+    {showRecordingHistory && (
+      <div style={{
+        border: "1px solid #ddd", borderRadius: "4px", padding: "10px",
+        backgroundColor: "#5e5e5eff", maxHeight: "250px", overflowY: "auto"
+      }}>
+        <h4 style={{ margin: "0 0 10px 0", borderBottom: "1px solid #777", paddingBottom: "5px" }}>
+             Log de Transcrições do Paciente
+        </h4>
+
+        {transcriptionLog.length === 0 ? (
+          <p style={{ margin: 0, color: "#ccc" }}>Nenhuma transcrição gravada para este paciente.</p>
+        ) : (
+          transcriptionLog.map((log) => (
+            <div key={log.id} style={{
+              padding: "8px", borderBottom: "1px solid #666", fontSize: "0.9em",
+              marginBottom: "5px", backgroundColor: "rgba(255,255,255,0.05)"
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', color: "#aaa", fontSize: "0.8em", marginBottom: "4px" }}>
+                <span>📅 {new Date(log.timestamp).toLocaleString()}</span>
+                <span>⏱ {log.duration}</span>
+              </div>
+
+              {/* Exibindo o ID da consulta para referência */}
+              <div style={{ fontSize: "0.75em", color: "#4CAF50", marginBottom: "4px" }}>
+                 Ref: {log.consultation_id === consultationId ? "(Atual) " : ""}
+                 {log.consultation_id ? log.consultation_id.slice(0, 8) : "N/A"}...
+              </div>
+
+              <div style={{ color: "#fff", fontStyle: "italic" }}>
+                "{log.text}"
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    )}
+  </div>
+)}
+</>
       {/* Main Chat Area */}
       <div className="chat-container">
         <Chat
