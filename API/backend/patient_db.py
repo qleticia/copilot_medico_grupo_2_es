@@ -218,9 +218,17 @@ def add_message_to_consultation_history(patient_id: str, consultation_id: str, r
         print(f"Erro: Consulta {consultation_id} não encontrada para o paciente {patient_id}.")
 
 
-def add_transcription_log_to_patient(patient_id, consultation_id, text, duration_seconds):
+
+def add_transcription_log_to_patient(patient_id, consultation_id, text, duration_seconds, dialogue=None):
     """
-    Salva uma transcrição pura no histórico exclusivo de transcrições do paciente.
+    Salva uma transcrição no histórico exclusivo de transcrições do paciente.
+
+    Args:
+        patient_id (str): ID do paciente.
+        consultation_id (str): ID da consulta.
+        text (str): Texto corrido da transcrição.
+        duration_seconds (float): Duração do áudio em segundos.
+        dialogue (list, optional): Lista estruturada do diálogo (diarização) para renderizar chat.
     """
     db = load_database()
     patient_data = db.get(patient_id)
@@ -241,13 +249,13 @@ def add_transcription_log_to_patient(patient_id, consultation_id, text, duration
     log_entry = {
         "id": str(uuid.uuid4()),
         "consultation_id": consultation_id,
-        "text": text,
+        "text": text,  # Texto corrido (fallback)
+        "dialogue": dialogue,  # NOVA CAMPO: Estrutura rica (Médico/Paciente)
         "duration": duration_fmt,
         "timestamp": datetime.now().isoformat()
     }
 
-    # Adiciona no início da lista (mais recente primeiro) ou no final, conforme preferência.
-    # Aqui estou colocando no início para fácil acesso visual.
+    # Adiciona no início da lista (mais recente primeiro)
     patient_data["transcription_log"].insert(0, log_entry)
 
     save_database(db)
