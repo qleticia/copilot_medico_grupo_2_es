@@ -14,7 +14,7 @@ except ImportError:
     from processador_voz import TranscritorVoz
 
 # --- CONFIGURAÇÃO DE TESTE ---
-MODO_TESTE_SOZINHO = True
+MODO_TESTE_SOZINHO = False
 
 
 class Diarizador:
@@ -169,8 +169,8 @@ class Diarizador:
         }
 
         # Configurações de Fusão
-        MAX_SILENCE = 2.0
-        SIMILARITY_THRESHOLD = 0.6
+        MAX_SILENCE = 2.5
+        SIMILARITY_THRESHOLD = 0.8
 
         for i in range(1, len(raw_segments)):
             next_raw = raw_segments[i]
