@@ -1,6 +1,6 @@
 import io
 import json
-from backend import patient_db as pdb
+from ..backend import patient_db as pdb
 
 
 def test_patient_exists_endpoint_false(client):
