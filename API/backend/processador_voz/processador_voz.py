@@ -3,21 +3,37 @@ import re
 
 class CapturaAudio:
     """
-     Esta classe serve apenas para captura local (microfone do servidor).
-
+    Classe responsável por capturar o áudio do microfone em tempo real.
     """
     def __init__(self):
         self.reconhecedor = sr.Recognizer()
         self.microfone = sr.Microphone()
+        self.reconhecedor.pause_threshold = 0.8
+        self.reconhecedor.dynamic_energy_threshold = True
+
+    def iniciar_escuta(self):
+        """Ajusta o reconhecedor para o ruído ambiente e inicia a escuta."""
+        with self.microfone as source:
+            self.reconhecedor.adjust_for_ambient_noise(source)
+        print("Módulo de áudio iniciado. Aguardando paciente...")
 
     def escutar_usuario(self):
+        """
+        Captura o áudio do microfone e o retorna como um objeto AudioData.
+        Retorna None se houver erro na captura.
+        """
         try:
             with self.microfone as source:
-                self.reconhecedor.adjust_for_ambient_noise(source)
-                print("Escutando microfone local...")
-                return self.reconhecedor.listen(source)
+                audio = self.reconhecedor.listen(source)
+                return audio
+        except sr.UnknownValueError:
+            print("Não foi possível entender o áudio.")
+            return None
+        except sr.RequestError as e:
+            print(f"Erro ao solicitar resultados do serviço de reconhecimento de fala; {e}")
+            return None
         except Exception as e:
-            print(f"Erro no mic local: {e}")
+            print(f"Ocorreu um erro inesperado na captura de áudio: {e}")
             return None
 
 class TranscritorVoz:
