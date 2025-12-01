@@ -3,3 +3,7 @@ google-generativeai
 spacy
 PyPDF2
 Flask-Cors
+python-dotenv
+SpeechRecognition
+numpy
+python3-pika
