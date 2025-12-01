@@ -23,82 +23,59 @@ from backend.patient_db import (
     get_patient_transcription_log
     )
 from backend.processador_voz.processador_voz import TranscritorVoz
-
+from backend.audio_service import Diarizador
 app = Flask(__name__)
 CORS(app)
 
-# NOVO ENDPOINT: Diarização de Áudio
-@app.route('/api/diarize_audio', methods=['POST'])
-def diarize_audio_route():
-    """
-    Recebe um arquivo de áudio e simula o envio para processamento
-    de diferenciação de voz (Diarização).
-    """
-    try:
-        # A rota espera que o arquivo seja enviado sob o nome 'audio_file'
-        if 'audio_file' not in request.files:
-            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado (esperado 'audio_file' no form-data)."}), 400
+audio_processor = None
 
-        audio_file = request.files['audio_file']
-        
-        # O arquivo precisa ser lido (ex: audio_file.read()) e enviado
-        # para o módulo especializado (ex: audio_listener.py ou um worker via RabbitMQ).
+try:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # Caminhos para os modelos dentro da pasta backend
+    MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-small-pt-0.3")
+    SPK_MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-spk-0.4")
 
-        # Verificação básica do nome do arquivo (opcional)
-        filename = audio_file.filename or "audio_sem_nome"
+    print(f"[SERVER] Carregando Modelos de IA...")
 
-        # --- SIMULAÇÃO DO FLUXO DE PROCESSAMENTO ---
-        # ATENÇÃO: Na produção, esta lógica chamaria o módulo que usa 
-        # google-cloud-speech com a flag de Diarização.
-        
-        # Supondo que o processamento foi bem-sucedido e retornou o resultado.
-        simulated_result = {
-            "file_name": filename,
-            "transcricao_diarizada": "Mensagem presente no áudio!!!",
-            "speakers_identificados": 2,
-            "processamento_status": "Simulação concluída. Pronto para enviar ao LLM."
-        }
-        
-        return jsonify({
-            "status": "success",
-            "message": f"Áudio '{filename}' recebido e processamento de diarização simulado com sucesso.",
-            "diarization_data": simulated_result
-        }), 200
-        
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Erro interno ao processar diarização: {e}"}), 500
+    # Inicializa a classe Diarizador (Vosk + Google)
+    if os.path.exists(MODEL_PATH) and os.path.exists(SPK_MODEL_PATH):
+        audio_processor = Diarizador(
+            model_path=MODEL_PATH,
+            spk_model_path=SPK_MODEL_PATH
+        )
+        print("✅ Diarizador Inteligente carregado com sucesso!")
+    else:
+        print(f"⚠️ Modelos não encontrados em: {MODEL_PATH}")
+        print("   -> Baixe os modelos em https://alphacephei.com/vosk/models e extraia na pasta backend.")
+
+except Exception as e:
+    print(f"⚠️ AVISO: Falha ao carregar Diarizador: {e}")
+    print("   -> O sistema funcionará apenas com Transcrição Simples.")
+    audio_processor = None
 
 
 @app.route('/api/transcribe_audio', methods=['POST'])
 def transcribe_audio_route():
     """
-    Recebe um arquivo de áudio, processa a transcrição e salva no histórico
-    de logs de transcrição do paciente (separado do chat).
+    Recebe áudio, faz Diarização (se disponível) ou Transcrição simples,
+    salva no log e retorna o texto para o chat.
     """
+    tmp_path = None
     try:
-        # 1. Validação do Arquivo
+        # 1. Validação Básica
         if 'audio_file' not in request.files:
-            return jsonify({"status": "error", "message": "Nenhum arquivo de áudio enviado."}), 400
+            return jsonify({"status": "error", "message": "Nenhum arquivo enviado."}), 400
 
         audio_file = request.files['audio_file']
-
-        if audio_file.filename == '':
-            return jsonify({"status": "error", "message": "Arquivo de áudio vazio."}), 400
-
-        # 2. Captura e Validação dos IDs e Metadados (NOVAS MUDANÇAS)
         patient_id = request.form.get('patient_id')
         consultation_id = request.form.get('consultation_id')
-        # Tenta pegar a duração enviada pelo front, ou define 0 para calcular depois
+        # Duração estimada vinda do front (pode ser 0)
         duration_input = request.form.get('duration', 0.0, type=float)
 
         if not patient_id or not consultation_id:
-            return jsonify({"status": "error", "message": "IDs de paciente e consulta são obrigatórios."}), 400
+            return jsonify({"status": "error", "message": "IDs obrigatórios."}), 400
 
-        print(f"[TRANSCRIÇÃO] Processando arquivo: {audio_file.filename} | Paciente: {patient_id[:8]}...")
-
-        # 3. Salvamento Temporário
+        # 2. Salvar arquivo temporário
         file_ext = '.wav'
         if audio_file.filename and '.' in audio_file.filename:
             file_ext = '.' + audio_file.filename.split('.')[-1]
@@ -106,103 +83,106 @@ def transcribe_audio_route():
         with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
             tmp_path = tmp.name
             audio_file.save(tmp_path)
-            print(f"[TRANSCRIÇÃO] Arquivo salvo temporariamente em: {tmp_path}")
+            print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
 
-        try:
-            # 4. Processamento com TranscritorVoz
-            print(f"[TRANSCRIÇÃO] Iniciando transcrição com TranscritorVoz...")
-            transcritor = TranscritorVoz(idioma="pt-BR")
+        # Variáveis de resultado
+        texto_final = ""
+        dialogue_structure = None
+        final_duration = duration_input
 
-            with sr.AudioFile(tmp_path) as source:
-                audio_data = transcritor.reconhecedor.record(source)
-                # Se o front não mandou duração precisa, calculamos uma estimativa aqui
-                calculated_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
-                print(f"[TRANSCRIÇÃO] Áudio carregado. Duration calc: {calculated_duration:.2f}s")
+        # 3. Processamento (Tentativa de Diarização Inteligente)
+        processed_successfully = False
 
-            # Define a duração final a ser salva (prioriza a do áudio real se a do front for 0)
-            final_duration = calculated_duration if duration_input == 0 else duration_input
+        if audio_processor:
+            try:
+                print(f"[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
+                # Aqui chamamos sua classe Diarizador
+                result = audio_processor.processar_audio(tmp_path)
 
-            texto = transcritor.transcrever(audio_data)
-            print(f"[TRANSCRIÇÃO] Transcrição concluída: {texto[:100]}...")
+                texto_final = result['full_text']
+                dialogue_structure = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
 
-            # Remove arquivo temporário
-            os.remove(tmp_path)
+                # Se a duração veio 0 do front, tentamos estimar (opcional, mas o Vosk não retorna duration total fácil)
+                if final_duration == 0 and dialogue_structure:
+                    # Pega o fim do último segmento como duração aproximada
+                    final_duration = dialogue_structure[-1].get('end', 0) if len(dialogue_structure) > 0 else 0
 
-            # 5. Verificação de Erros de Reconhecimento (Silêncio ou Ruído)
-            invalid_phrases = [
-                "Não foi possível entender o áudio",
-                "Erro na API de reconhecimento de fala"
-            ]
-            # Verifica se o texto retornado contém alguma frase de erro
-            if any(phrase in texto for phrase in invalid_phrases):
-                # Retorna status success (para não dar erro HTTP), mas com flag de erro lógico
-                return jsonify({
-                    "status": "success",
-                    "transcription": texto,
-                    "is_error": True
-                }), 200
+                processed_successfully = True
+                print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
+            except Exception as e:
+                print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
+                processed_successfully = False
 
-            # 6. Salvar no Histórico Separado de Transcrições (NOVA MUDANÇA)
-            # Chama a função que adiciona ao 'transcription_log' no JSON
-            log_entry = add_transcription_log_to_patient(
-                patient_id=patient_id,
-                consultation_id=consultation_id,
-                text=texto,
-                duration_seconds=final_duration
-            )
+        # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
+        if not processed_successfully:
+            print(f"[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
+            try:
+                transcritor = TranscritorVoz(idioma="pt-BR")
+                with sr.AudioFile(tmp_path) as source:
+                    audio_data = transcritor.reconhecedor.record(source)
+                    # Calcula duração se não tiver
+                    if final_duration == 0:
+                        final_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
 
-            # Retorna o log_entry para o frontend atualizar a lista sem recarregar
+                    texto_final = transcritor.transcrever(audio_data)
+                    dialogue_structure = None  # Não tem estrutura de médico/paciente
+            except Exception as e_simple:
+                print(f"❌ Erro fatal também na transcrição simples: {e_simple}")
+                raise e_simple
+
+        # 5. Validação de Erro de Áudio (Silêncio/Ruído)
+        invalid_phrases = [
+            "Não foi possível entender o áudio",
+            "Erro na API de reconhecimento"
+        ]
+        if any(phrase in texto_final for phrase in invalid_phrases):
             return jsonify({
                 "status": "success",
-                "transcription": texto,
-                "consultation_id": consultation_id,
-                "log_entry": log_entry,
-                "is_error": False
+                "transcription": texto_final,
+                "is_error": True
             }), 200
 
-        except Exception as e:
-            print(f"[TRANSCRIÇÃO] Erro durante processamento: {e}")
-            import traceback
-            traceback.print_exc()
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-            raise
+        # 6. Salvar no Banco (Com o novo campo 'dialogue')
+        log_entry = add_transcription_log_to_patient(
+            patient_id=patient_id,
+            consultation_id=consultation_id,
+            text=texto_final,
+            duration_seconds=final_duration if final_duration > 0 else 1.0,
+            dialogue=dialogue_structure  # <--- O PULO DO GATO ESTÁ AQUI
+        )
+
+        return jsonify({
+            "status": "success",
+            "transcription": texto_final,
+            "consultation_id": consultation_id,
+            "log_entry": log_entry,  # O frontend vai receber isso e renderizar colorido
+            "is_error": False
+        }), 200
 
     except Exception as e:
-        print(f"[TRANSCRIÇÃO] Erro interno: {e}")
+        print(f"[TRANSCRIÇÃO] Erro 500: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Erro interno ao transcrever áudio: {e}"}), 500
-
+        return jsonify({"status": "error", "message": f"Erro interno: {e}"}), 500
+    finally:
+        # Limpeza
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
 @app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
 def get_transcription_log_api(patient_id):
-    """
-    Retorna o histórico detalhado de transcrições de áudio.
-    """
     try:
-        # CORREÇÃO AQUI:
-        # Em vez de chamar a outra rota, verificamos o banco diretamente.
-        # Isso evita o erro de tupla e é mais performático.
-        patient_data = get_patient_data(patient_id)
-
-        if not patient_data:
-            return jsonify({"status": "error", "message": "Paciente não encontrado."}), 404
-
-        # Busca os logs usando a função helper do banco de dados
-        logs = get_patient_transcription_log(patient_id)
-
+        logs = get_patient_transcription_log(patient_id) # Função do seu patient_db
         return jsonify({
             "status": "success",
             "logs": logs,
             "count": len(logs)
         }), 200
-
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": f"Erro ao recuperar logs de transcrição: {e}"}), 500
+        print(f"Erro ao buscar logs: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
 def check_patient_exists_api(patient_id):

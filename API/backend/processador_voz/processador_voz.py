@@ -3,42 +3,26 @@ import re
 
 class CapturaAudio:
     """
-    Classe responsável por capturar o áudio do microfone em tempo real.
+     Esta classe serve apenas para captura local (microfone do servidor).
+
     """
     def __init__(self):
         self.reconhecedor = sr.Recognizer()
         self.microfone = sr.Microphone()
-        self.reconhecedor.pause_threshold = 0.8
-        self.reconhecedor.dynamic_energy_threshold = True
-
-    def iniciar_escuta(self):
-        """Ajusta o reconhecedor para o ruído ambiente e inicia a escuta."""
-        with self.microfone as source:
-            self.reconhecedor.adjust_for_ambient_noise(source)
-        print("Módulo de áudio iniciado. Aguardando paciente...")
 
     def escutar_usuario(self):
-        """
-        Captura o áudio do microfone e o retorna como um objeto AudioData.
-        Retorna None se houver erro na captura.
-        """
         try:
             with self.microfone as source:
-                audio = self.reconhecedor.listen(source)
-                return audio
-        except sr.UnknownValueError:
-            print("Não foi possível entender o áudio.")
-            return None
-        except sr.RequestError as e:
-            print(f"Erro ao solicitar resultados do serviço de reconhecimento de fala; {e}")
-            return None
+                self.reconhecedor.adjust_for_ambient_noise(source)
+                print("Escutando microfone local...")
+                return self.reconhecedor.listen(source)
         except Exception as e:
-            print(f"Ocorreu um erro inesperado na captura de áudio: {e}")
+            print(f"Erro no mic local: {e}")
             return None
 
 class TranscritorVoz:
     """
-    Classe responsável por transcrever o áudio capturado para texto.
+    Classe reutilizável para transcrever áudio usando Google Speech Recognition.
     """
     def __init__(self, idioma="pt-BR"):
         self.reconhecedor = sr.Recognizer()
@@ -46,26 +30,23 @@ class TranscritorVoz:
 
     def transcrever(self, audio_data):
         """
-        Transcreve o objeto AudioData para texto utilizando a API de reconhecimento de fala do Google.
-
-        Args:
-            audio_data (sr.AudioData): O áudio a ser transcrito.
-
-        Returns:
-            str: O texto transcrito ou uma string vazia em caso de falha.
+        Transcreve AudioData para texto.
+        Retorna string com erro se falhar, para logs visuais.
         """
         if not isinstance(audio_data, sr.AudioData):
-            raise ValueError("O dado de entrada deve ser um objeto AudioData.")
+            return "Erro: Dados de áudio inválidos."
 
         try:
             texto = self.reconhecedor.recognize_google(audio_data, language=self.idioma)
             return texto
         except sr.UnknownValueError:
-            return "Não foi possível entender o áudio."
+            return None # Retorna None para facilitar fallback
         except sr.RequestError as e:
-            return f"Erro na API de reconhecimento de fala: {e}"
+            print(f"Erro na API Google: {e}")
+            return None
         except Exception as e:
-            return f"Ocorreu um erro inesperado na transcrição: {e}"
+            print(f"Erro inesperado na transcrição: {e}")
+            return None
 
 class ConstrutorContexto:
     """
@@ -78,39 +59,18 @@ class ConstrutorContexto:
         self.historico_conversa = []
 
     def adicionar_ao_historico(self, texto):
-        """Adiciona o texto transcrito ao histórico da conversa."""
         self.historico_conversa.append(texto)
 
     def construir_contexto(self, texto_recente):
-        """
-        Constrói o contexto para o LLM a partir do histórico da conversa e do texto mais recente.
-        Este método pode ser expandido para incluir extração de entidades, resumo, etc.
-
-        Args:
-            texto_recente (str): O último texto transcrito.
-
-        Returns:
-            dict: Um dicionário contendo o contexto estruturado.
-        """
         self.adicionar_ao_historico(texto_recente)
-
-        contexto = {
-            "paciente": {
-                "id": self.id_paciente,
-                "nome": self.nome_paciente
-            },
+        return {
+            "paciente": {"id": self.id_paciente, "nome": self.nome_paciente},
             "transcricao_recente": texto_recente,
             "historico_completo": " ".join(self.historico_conversa),
             "palavras_chave": self._extrair_palavras_chave(texto_recente)
         }
-        return contexto
 
     def _extrair_palavras_chave(self, texto):
-        """
-        Um método simples para extrair palavras-chave (pode ser substituído por uma abordagem mais sofisticada com NLP).
-        """
+        stop_words = set(["a", "o", "e", "é", "de", "do", "da", "para", "com", "em", "um", "uma", "que"])
         palavras = re.findall(r'\b\w+\b', texto.lower())
-        # Exemplo simplista: remove stop words comuns e retorna palavras com mais de 4 caracteres
-        stop_words = set(["a", "o", "e", "é", "de", "do", "da", "para", "com", "em", "um", "uma"])
-        return [palavra for palavra in palavras if palavra not in stop_words and len(palavra) > 4]
-
+        return [p for p in palavras if p not in stop_words and len(p) > 4]
