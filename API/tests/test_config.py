@@ -1,5 +1,5 @@
 import importlib
-from backend import config as cfg
+from ..backend import config as cfg
 
 
 def test_settings_reads_env(env_for_config, monkeypatch):

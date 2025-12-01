@@ -1,6 +1,6 @@
 import json
 import re
-from backend import patient_db as pdb
+from ..backend import patient_db as pdb
 
 def test_load_database_empty_when_missing(temp_db_file):
     data = pdb.load_database()

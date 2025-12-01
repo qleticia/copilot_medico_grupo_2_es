@@ -5,7 +5,7 @@ import speech_recognition as sr
 import io
 import wave
 import os
-from backend.processador_voz.processador_voz import TranscritorVoz
+from .processador_voz.processador_voz import TranscritorVoz
 
 # --- Configuração do RabbitMQ ---
 # Usaremos variáveis de ambiente para flexibilidade, com um fallback para localhost

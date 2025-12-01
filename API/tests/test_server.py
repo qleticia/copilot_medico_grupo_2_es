@@ -13,7 +13,7 @@ sys.path.insert(0, grandparent_dir)
 
 import unittest
 from unittest.mock import patch, MagicMock
-from server import app # Importa a instância do Flask
+from API.server import app# Importa a instância do Flask
 
 class TestPatientCreation(unittest.TestCase):
 
