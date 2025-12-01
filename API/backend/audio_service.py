@@ -14,7 +14,7 @@ except ImportError:
     from processador_voz import TranscritorVoz
 
 # --- CONFIGURAÇÃO DE TESTE ---
-MODO_TESTE_SOZINHO = False
+MODO_TESTE_SOZINHO = True
 
 
 class Diarizador:

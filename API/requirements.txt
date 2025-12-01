@@ -7,3 +7,4 @@ python-dotenv
 SpeechRecognition
 numpy
 python3-pika
+vosk
