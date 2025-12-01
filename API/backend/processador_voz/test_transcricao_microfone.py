@@ -51,7 +51,7 @@ class TestarTranscricaoMicrofone(unittest.TestCase):
 
         # 1. Capturar o áudio
         print(">>> OUVINDO... (fale e depois faça uma pausa)")
-        audio_data = self.capturador.escutar_paciente()
+        audio_data = self.capturador.escutar_usuario()
         print(">>> CAPTURA CONCLUÍDA. Enviando para transcrição...")
 
         # Verifica se a captura funcionou

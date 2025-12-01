@@ -1,7 +1,10 @@
 import os
+from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from . import patient_db # Usando import relativo
+
+load_dotenv()
 
 # Configuração da API Gemini
 try:

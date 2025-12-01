@@ -17,7 +17,7 @@ class CapturaAudio:
             self.reconhecedor.adjust_for_ambient_noise(source)
         print("Módulo de áudio iniciado. Aguardando paciente...")
 
-    def escutar_paciente(self):
+    def escutar_usuario(self):
         """
         Captura o áudio do microfone e o retorna como um objeto AudioData.
         Retorna None se houver erro na captura.
