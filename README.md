@@ -128,6 +128,6 @@ pip install requirements.txt
 2. Na raiz do projeto:
    docker-compose up --build
 3. Backend disponível em http://localhost:3001
-4. Frontend (opcional) disponível em http://localhost:8080 (apenas para testar a build)
+
 
 ---
