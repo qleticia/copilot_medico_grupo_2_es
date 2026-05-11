@@ -6,6 +6,8 @@ from datetime import datetime
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+import tempfile
+import speech_recognition as sr
 
 # Assuming these imports are correct and available
 from backend import gemini_connection
@@ -17,11 +19,169 @@ from backend.patient_db import (
     load_database, save_database, generate_patient_id, get_patient_data, 
     get_all_patients_info, ensure_patient_exists, get_patient_chat_history, 
     add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
-    get_consultation_chat_history, add_message_to_consultation_history
-)
-
+    get_consultation_chat_history, add_message_to_consultation_history, add_transcription_log_to_patient,
+    get_patient_transcription_log
+    )
+from backend.processador_voz.processador_voz import TranscritorVoz
+from backend.audio_service import Diarizador
 app = Flask(__name__)
 CORS(app)
+
+audio_processor = None
+
+try:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    # Caminhos para os modelos dentro da pasta backend
+    MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-small-pt-0.3")
+    SPK_MODEL_PATH = os.path.join(BASE_DIR, "backend", "vosk-model-spk-0.4")
+
+    print(f"[SERVER] Carregando Modelos de IA...")
+
+    # Inicializa a classe Diarizador (Vosk + Google)
+    if os.path.exists(MODEL_PATH) and os.path.exists(SPK_MODEL_PATH):
+        audio_processor = Diarizador(
+            model_path=MODEL_PATH,
+            spk_model_path=SPK_MODEL_PATH
+        )
+        print("✅ Diarizador Inteligente carregado com sucesso!")
+    else:
+        print(f"⚠️ Modelos não encontrados em: {MODEL_PATH}")
+        print("   -> Baixe os modelos em https://alphacephei.com/vosk/models e extraia na pasta backend.")
+
+except Exception as e:
+    print(f"⚠️ AVISO: Falha ao carregar Diarizador: {e}")
+    print("   -> O sistema funcionará apenas com Transcrição Simples.")
+    audio_processor = None
+
+
+@app.route('/api/transcribe_audio', methods=['POST'])
+def transcribe_audio_route():
+    """
+    Recebe áudio, faz Diarização (se disponível) ou Transcrição simples,
+    salva no log e retorna o texto para o chat.
+    """
+    tmp_path = None
+    try:
+        # 1. Validação Básica
+        if 'audio_file' not in request.files:
+            return jsonify({"status": "error", "message": "Nenhum arquivo enviado."}), 400
+
+        audio_file = request.files['audio_file']
+        patient_id = request.form.get('patient_id')
+        consultation_id = request.form.get('consultation_id')
+        # Duração estimada vinda do front (pode ser 0)
+        duration_input = request.form.get('duration', 0.0, type=float)
+
+        if not patient_id or not consultation_id:
+            return jsonify({"status": "error", "message": "IDs obrigatórios."}), 400
+
+        # 2. Salvar arquivo temporário
+        file_ext = '.wav'
+        if audio_file.filename and '.' in audio_file.filename:
+            file_ext = '.' + audio_file.filename.split('.')[-1]
+
+        with tempfile.NamedTemporaryFile(suffix=file_ext, delete=False) as tmp:
+            tmp_path = tmp.name
+            audio_file.save(tmp_path)
+            print(f"[TRANSCRIÇÃO] Áudio salvo em: {tmp_path}")
+
+        # Variáveis de resultado
+        texto_final = ""
+        dialogue_structure = None
+        final_duration = duration_input
+
+        # 3. Processamento (Tentativa de Diarização Inteligente)
+        processed_successfully = False
+
+        if audio_processor:
+            try:
+                print(f"[TRANSCRIÇÃO] Iniciando Diarização (Vosk + Google)...")
+                # Aqui chamamos sua classe Diarizador
+                result = audio_processor.processar_audio(tmp_path)
+
+                texto_final = result['full_text']
+                dialogue_structure = result['dialogue']  # Estrutura JSON rica (Médico/Paciente)
+
+                # Se a duração veio 0 do front, tentamos estimar (opcional, mas o Vosk não retorna duration total fácil)
+                if final_duration == 0 and dialogue_structure:
+                    # Pega o fim do último segmento como duração aproximada
+                    final_duration = dialogue_structure[-1].get('end', 0) if len(dialogue_structure) > 0 else 0
+
+                processed_successfully = True
+                print("[TRANSCRIÇÃO] Diarização concluída com sucesso.")
+            except Exception as e:
+                print(f"❌ Erro na Diarização: {e}. Tentando fallback simples...")
+                processed_successfully = False
+
+        # 4. Fallback (Transcrição Simples) se o Diarizador falhar ou não existir
+        if not processed_successfully:
+            print(f"[TRANSCRIÇÃO] Usando Transcritor Simples (Legacy)...")
+            try:
+                transcritor = TranscritorVoz(idioma="pt-BR")
+                with sr.AudioFile(tmp_path) as source:
+                    audio_data = transcritor.reconhecedor.record(source)
+                    # Calcula duração se não tiver
+                    if final_duration == 0:
+                        final_duration = len(audio_data.frame_data) / audio_data.sample_rate / audio_data.sample_width
+
+                    texto_final = transcritor.transcrever(audio_data)
+                    dialogue_structure = None  # Não tem estrutura de médico/paciente
+            except Exception as e_simple:
+                print(f"❌ Erro fatal também na transcrição simples: {e_simple}")
+                raise e_simple
+
+        # 5. Validação de Erro de Áudio (Silêncio/Ruído)
+        invalid_phrases = [
+            "Não foi possível entender o áudio",
+            "Erro na API de reconhecimento"
+        ]
+        if any(phrase in texto_final for phrase in invalid_phrases):
+            return jsonify({
+                "status": "success",
+                "transcription": texto_final,
+                "is_error": True
+            }), 200
+
+        # 6. Salvar no Banco (Com o novo campo 'dialogue')
+        log_entry = add_transcription_log_to_patient(
+            patient_id=patient_id,
+            consultation_id=consultation_id,
+            text=texto_final,
+            duration_seconds=final_duration if final_duration > 0 else 1.0,
+            dialogue=dialogue_structure  # <--- O PULO DO GATO ESTÁ AQUI
+        )
+
+        return jsonify({
+            "status": "success",
+            "transcription": texto_final,
+            "consultation_id": consultation_id,
+            "log_entry": log_entry,  # O frontend vai receber isso e renderizar colorido
+            "is_error": False
+        }), 200
+
+    except Exception as e:
+        print(f"[TRANSCRIÇÃO] Erro 500: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro interno: {e}"}), 500
+    finally:
+        # Limpeza
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+# Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
+@app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
+def get_transcription_log_api(patient_id):
+    try:
+        logs = get_patient_transcription_log(patient_id) # Função do seu patient_db
+        return jsonify({
+            "status": "success",
+            "logs": logs,
+            "count": len(logs)
+        }), 200
+    except Exception as e:
+        print(f"Erro ao buscar logs: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
@@ -209,7 +369,7 @@ def handle_patient_consultations(patient_id):
             
             if import_consultation_ids and isinstance(import_consultation_ids, list) and len(import_consultation_ids) > 0:
                 initial_history.append({
-                    "role": "bot",
+                    "role": "model",
                     "parts": [{"text": f"Históricos importados de consultas anteriores: {', '.join([c_id[:8] + '...' for c_id in import_consultation_ids])}."}],
                     "timestamp": datetime.now().isoformat()
                 })
@@ -218,13 +378,13 @@ def handle_patient_consultations(patient_id):
                     old_history = get_consultation_chat_history(patient_id, old_consultation_id)
                     if old_history:
                         initial_history.append({
-                            "role": "bot",
+                            "role": "model",
                             "parts": [{"text": f"--- Início do Histórico da Consulta {old_consultation_id[:8]}... ---"}],
                             "timestamp": datetime.now().isoformat()
                         })
                         initial_history.extend(old_history)
                         initial_history.append({
-                            "role": "bot",
+                            "role": "model",
                             "parts": [{"text": f"--- Fim do Histórico da Consulta {old_consultation_id[:8]}... ---"}],
                             "timestamp": datetime.now().isoformat()
                         })
@@ -286,6 +446,58 @@ def get_all_patients():
         import traceback
         traceback.print_exc() 
         return jsonify({"status": "error", "message": f"Erro ao obter lista de pacientes: {e}"}), 500
+
+@app.route('/api/recommendations', methods=['POST'])
+def handle_recommendations():
+    """
+    Endpoint para solicitação de recomendações com base no andamento/histórico da consulta.
+    """
+    try:
+
+        data = request.get_json()
+
+        # Verifica se o JSON existe
+        if not data:
+            return jsonify({"error": "Requisição inválida. Corpo JSON esperado."}), 400
+
+        # Verifica se o patient_id e o consultation_id estão presentes no JSON
+        patient_id = data.get('patient_id')
+        consultation_id = data.get('consultation_id')
+
+        if not patient_id or not consultation_id:
+            return jsonify({"error": "paciente_id e consulta_id não encontrados."}), 400
+
+        # Define o caminho para o arquivo do prompt de recomendações
+        prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
+
+        # Verifica se o arquivo existe
+        if not os.path.exists(prompt_file_path):
+            raise FileNotFoundError(f"Arquivo de prompt não encontrado em: {prompt_file_path}")
+
+        # Lê o conteúdo do arquivo
+        with open(prompt_file_path, 'r', encoding='utf-8') as f:
+            prompt_recomendacao_medica = f.read()
+
+        if not prompt_recomendacao_medica:
+            raise ValueError(f"O arquivo de prompt {prompt_file_path} está vazio.")
+
+        print(f"[RECOMENDAÇÃO] Iniciando busca para consulta_id: {consultation_id}")
+
+        # Chama a API Gemini. Ela carrega o histórico (incluindo transcrições) e
+        # recebe o prompt de recomendação.
+        resposta_ia = gemini_connection.send_message(
+            patient_id,
+            consultation_id,
+            prompt_recomendacao_medica
+        )
+
+        # Retornar a recomendação para o frontend
+        return jsonify({"status": "success", "recommendation": resposta_ia}), 200
+
+    except Exception as e:
+        print(f"Erro catastrófico no endpoint /get_recommendation: {e}")
+        return jsonify({"error": f"Erro interno do servidor: {str(e)}"}), 500
+
 
 
 if __name__ == '__main__':

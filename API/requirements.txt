@@ -1,0 +1,10 @@
+Flask==3.0.3
+google-generativeai
+spacy
+PyPDF2
+Flask-Cors
+python-dotenv
+SpeechRecognition
+numpy
+python3-pika
+vosk

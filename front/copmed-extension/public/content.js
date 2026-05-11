@@ -64,7 +64,7 @@ function extractEditableNotesData() {
 
 // botao
 
-const floatingButton = document.createElement('button');
+/*const floatingButton = document.createElement('button');
 floatingButton.innerText = 'Extrair Dados';
 floatingButton.style.position = 'fixed';
 floatingButton.style.top = '20px';
@@ -120,3 +120,4 @@ floatingButton.addEventListener('click', () => {
     }, 3000);
   }
 });
+*/

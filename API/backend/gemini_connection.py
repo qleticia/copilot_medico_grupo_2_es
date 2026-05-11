@@ -1,7 +1,10 @@
 import os
+from dotenv import load_dotenv
 import google.generativeai as genai
 from google.generativeai.types import HarmCategory, HarmBlockThreshold
 from . import patient_db # Usando import relativo
+
+load_dotenv()
 
 # Configuração da API Gemini
 try:
@@ -24,7 +27,7 @@ except FileNotFoundError as e:
     raise
 
 # Configurações do Modelo
-MODEL_NAME = "gemini-1.5-flash-latest" # Recomendo 'gemini-1.5-flash-latest' ou 'gemini-1.5-pro-latest'
+MODEL_NAME = "gemini-flash-latest" # Recomendo 'gemini-1.5-flash-latest' ou 'gemini-1.5-pro-latest'
 SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,

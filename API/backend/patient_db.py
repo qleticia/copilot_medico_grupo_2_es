@@ -216,3 +216,60 @@ def add_message_to_consultation_history(patient_id: str, consultation_id: str, r
         save_database(db)
     else:
         print(f"Erro: Consulta {consultation_id} não encontrada para o paciente {patient_id}.")
+
+
+
+def add_transcription_log_to_patient(patient_id, consultation_id, text, duration_seconds, dialogue=None):
+    """
+    Salva uma transcrição no histórico exclusivo de transcrições do paciente.
+
+    Args:
+        patient_id (str): ID do paciente.
+        consultation_id (str): ID da consulta.
+        text (str): Texto corrido da transcrição.
+        duration_seconds (float): Duração do áudio em segundos.
+        dialogue (list, optional): Lista estruturada do diálogo (diarização) para renderizar chat.
+    """
+    db = load_database()
+    patient_data = db.get(patient_id)
+
+    if not patient_data:
+        print(f"Erro: Paciente {patient_id} não encontrado para salvar log de transcrição.")
+        return None
+
+    # Garante que a lista existe
+    if "transcription_log" not in patient_data:
+        patient_data["transcription_log"] = []
+
+    # Formatação da duração (ex: 125s -> "2:05")
+    mins = int(duration_seconds // 60)
+    secs = int(duration_seconds % 60)
+    duration_fmt = f"{mins}:{secs:02d}"
+
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "consultation_id": consultation_id,
+        "text": text,  # Texto corrido (fallback)
+        "dialogue": dialogue,  # NOVA CAMPO: Estrutura rica (Médico/Paciente)
+        "duration": duration_fmt,
+        "timestamp": datetime.now().isoformat()
+    }
+
+    # Adiciona no início da lista (mais recente primeiro)
+    patient_data["transcription_log"].insert(0, log_entry)
+
+    save_database(db)
+    return log_entry
+
+
+def get_patient_transcription_log(patient_id):
+    """
+    Recupera apenas a lista 'transcription_log' do JSON do paciente.
+    Retorna uma lista vazia se não houver logs ou se o paciente não tiver essa chave.
+    """
+    patient_data = get_patient_data(patient_id)
+
+    if patient_data and "transcription_log" in patient_data:
+        return patient_data["transcription_log"]
+
+    return []
