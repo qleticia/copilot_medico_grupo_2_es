@@ -1,6 +1,24 @@
 import io
 import json
 from ..backend import patient_db as pdb
+from backend import auth_decorators
+
+
+def _authorize_as(monkeypatch, profile="medico"):
+    def fake_get_user_from_token(token):
+        return (
+            {
+                "id": "user-test",
+                "email": "medico@example.com",
+                "name": "Medico Teste",
+                "profiles": [profile],
+                "active": True,
+            },
+            {"profile": profile},
+        )
+
+    monkeypatch.setattr(auth_decorators, "get_user_from_token", fake_get_user_from_token)
+    return {"Authorization": "Bearer token-teste"}
 
 
 def test_patient_exists_endpoint_false(client):
@@ -54,6 +72,56 @@ def test_upload_pdf_endpoint_happy_path(client):
     assert payload["status"] == "success"
     assert payload["ai_response"].startswith("[stubbed AI reply]")
     assert payload["consultation_id"]
+
+
+def test_extension_extracted_data_requires_token(client):
+    resp = client.post('/api/extension/extracted-data', json={})
+    assert resp.status_code == 401
+    assert resp.get_json()["status"] == "error"
+
+
+def test_extension_extracted_data_validates_payload(client, monkeypatch):
+    headers = _authorize_as(monkeypatch)
+
+    resp = client.post('/api/extension/extracted-data', json={}, headers=headers)
+
+    assert resp.status_code == 400
+    assert resp.get_json()["status"] == "error"
+
+
+def test_extension_extracted_data_saves_history_and_ai_response(client, monkeypatch):
+    headers = _authorize_as(monkeypatch)
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Paciente Teste")
+    cid = pdb.add_consultation_to_patient(pid, "Consulta Extensao")
+
+    payload = {
+        "patient_id": pid,
+        "consultation_id": cid,
+        "source_url": "https://sistema-prontuario.com/atendimento",
+        "extracted_content": [
+            {"role": "peso", "text": "70"},
+            {"role": "altura", "text": "1.75"},
+            {"role": "Anamnese", "text": "Paciente relata dor de cabeca"},
+        ],
+    }
+
+    resp = client.post('/api/extension/extracted-data', json=payload, headers=headers)
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["status"] == "success"
+    assert data["patient_id"] == pid
+    assert data["consultation_id"] == cid
+    assert data["ai_response"].startswith("[stubbed AI reply]")
+
+    history_resp = client.get(f"/api/patients/{pid}/consultations/{cid}/history")
+    assert history_resp.status_code == 200
+    history = history_resp.get_json()["history"]
+    saved_texts = [entry["parts"][0]["text"] for entry in history]
+    assert any("Fonte: https://sistema-prontuario.com/atendimento" in text for text in saved_texts)
+    assert any("- peso: 70" in text for text in saved_texts)
+    assert any(text.startswith("[stubbed AI reply]") for text in saved_texts)
 
 
 def test_create_and_list_consultations(client):
