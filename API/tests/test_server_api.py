@@ -3,6 +3,27 @@ import json
 from ..backend import patient_db as pdb
 
 
+def _auth_headers(monkeypatch, profile="medico"):
+    from backend import auth_decorators
+
+    def fake_get_user_from_token(token):
+        if token != "valid-token":
+            raise auth_decorators.AuthError("Token invalido", 401)
+        return (
+            {
+                "id": "user-1",
+                "email": "doctor@example.com",
+                "name": "Doctor",
+                "profiles": [profile],
+                "active": True,
+            },
+            {"profile": profile},
+        )
+
+    monkeypatch.setattr(auth_decorators, "get_user_from_token", fake_get_user_from_token)
+    return {"Authorization": "Bearer valid-token"}
+
+
 def test_patient_exists_endpoint_false(client):
     resp = client.get('/api/patient-exists/does-not-exist')
     assert resp.status_code == 200
@@ -54,6 +75,86 @@ def test_upload_pdf_endpoint_happy_path(client):
     assert payload["status"] == "success"
     assert payload["ai_response"].startswith("[stubbed AI reply]")
     assert payload["consultation_id"]
+
+
+def test_extension_extracted_data_requires_token(client):
+    resp = client.post('/api/extension/extracted-data', json={})
+    assert resp.status_code == 401
+    assert resp.get_json()["status"] == "error"
+
+
+def test_extension_extracted_data_rejects_unauthorized_profile(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+    cid = pdb.add_consultation_to_patient(pid, "Consulta X")
+
+    resp = client.post(
+        '/api/extension/extracted-data',
+        json={
+            "patient_id": pid,
+            "consultation_id": cid,
+            "extracted_content": [{"role": "peso", "text": "70"}],
+        },
+        headers=_auth_headers(monkeypatch, profile="recepcao"),
+    )
+
+    assert resp.status_code == 403
+    assert resp.get_json()["status"] == "error"
+
+
+def test_extension_extracted_data_rejects_invalid_payload(client, monkeypatch):
+    resp = client.post(
+        '/api/extension/extracted-data',
+        json={
+            "patient_id": "paciente_123",
+            "consultation_id": "consulta_456",
+            "extracted_content": [{"role": "peso"}],
+        },
+        headers=_auth_headers(monkeypatch),
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json()["status"] == "error"
+
+
+def test_extension_extracted_data_saves_user_and_ai_messages(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+    cid = pdb.add_consultation_to_patient(pid, "Consulta X")
+
+    resp = client.post(
+        '/api/extension/extracted-data',
+        json={
+            "patient_id": pid,
+            "consultation_id": cid,
+            "source_url": "https://sistema-prontuario.com/atendimento",
+            "extracted_content": [
+                {"role": "peso", "text": "70"},
+                {"role": "altura", "text": "1.75"},
+                {"role": "Anamnese", "text": "Paciente relata dor de cabeca"},
+            ],
+        },
+        headers=_auth_headers(monkeypatch, profile="medico"),
+    )
+
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["status"] == "success"
+    assert payload["patient_id"] == pid
+    assert payload["consultation_id"] == cid
+    assert payload["ai_response"].startswith("[stubbed AI reply]")
+
+    history = pdb.get_consultation_chat_history(pid, cid)
+    assert len(history) == 2
+    assert history[0]["role"] == "user"
+    saved_text = history[0]["parts"][0]["text"]
+    assert "Dados capturados da extensao Chrome" in saved_text
+    assert "Fonte: https://sistema-prontuario.com/atendimento" in saved_text
+    assert "peso: 70" in saved_text
+    assert "altura: 1.75" in saved_text
+    assert "Anamnese: Paciente relata dor de cabeca" in saved_text
+    assert history[1]["role"] == "model"
+    assert history[1]["parts"][0]["text"] == payload["ai_response"]
 
 
 def test_create_and_list_consultations(client):
