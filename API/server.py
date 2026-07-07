@@ -13,7 +13,7 @@ import speech_recognition as sr
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import text_filter
-from backend.auth_decorators import token_required
+from backend.auth_decorators import roles_required, token_required
 from backend.auth_service import (
     AuthError,
     authenticate_user,
@@ -98,6 +98,19 @@ def _auth_success_response(user, profile, token, expires_in):
             for user_profile in normalize_profiles(user.get("profiles"))
         ],
     }), 200
+
+
+def _format_extension_extracted_data(extracted_content, source_url=None):
+    lines = ["Dados capturados da extensao Chrome"]
+
+    if source_url:
+        lines.extend(["", f"Fonte: {source_url}"])
+
+    lines.append("")
+    for item in extracted_content:
+        lines.append(f"{item['role'].strip()}: {item['text'].strip()}")
+
+    return "\n".join(lines)
 
 
 @app.route('/api/auth/login', methods=['POST'])
@@ -407,6 +420,75 @@ def handle_chat_message():
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno do servidor: {e}"}), 500
+
+
+@app.route('/api/extension/extracted-data', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_extension_extracted_data():
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _json_error("Corpo JSON invalido.", 400)
+
+        patient_id = data.get("patient_id")
+        consultation_id = data.get("consultation_id")
+        source_url = data.get("source_url")
+        extracted_content = data.get("extracted_content")
+
+        if not isinstance(patient_id, str) or not patient_id.strip():
+            return _json_error("patient_id e obrigatorio.", 400)
+        if not isinstance(consultation_id, str) or not consultation_id.strip():
+            return _json_error("consultation_id e obrigatorio.", 400)
+        if source_url is not None and not isinstance(source_url, str):
+            return _json_error("source_url deve ser texto.", 400)
+        if not isinstance(extracted_content, list) or not extracted_content:
+            return _json_error("extracted_content deve ser uma lista nao vazia.", 400)
+
+        for index, item in enumerate(extracted_content):
+            if not isinstance(item, dict):
+                return _json_error(f"extracted_content[{index}] deve ser um objeto.", 400)
+            role = item.get("role")
+            text = item.get("text")
+            if not isinstance(role, str) or not role.strip():
+                return _json_error(f"extracted_content[{index}].role e obrigatorio.", 400)
+            if not isinstance(text, str) or not text.strip():
+                return _json_error(f"extracted_content[{index}].text e obrigatorio.", 400)
+
+        patient_id = patient_id.strip()
+        consultation_id = consultation_id.strip()
+        source_url = source_url.strip() if isinstance(source_url, str) and source_url.strip() else None
+
+        patient_data = get_patient_data(patient_id)
+        if not patient_data:
+            return _json_error("Paciente nao encontrado.", 404)
+
+        consultation_exists = any(
+            consultation.get("id") == consultation_id
+            for consultation in patient_data.get("consultations", [])
+        )
+        if not consultation_exists:
+            return _json_error("Consulta nao encontrada.", 404)
+
+        formatted_text = _format_extension_extracted_data(extracted_content, source_url)
+        filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
+
+        add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_text)
+
+        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
+
+        add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
+
+        return jsonify({
+            "status": "success",
+            "ai_response": ai_response_text,
+            "patient_id": patient_id,
+            "consultation_id": consultation_id
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro interno ao processar dados da extensao: {e}"}), 500
 
 
 # Endpoint de Upload de PDF
