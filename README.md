@@ -90,6 +90,41 @@ pip install requirements.txt
 
 #### Frontend
 
+### Aplicacao web React
+
+Esta etapa adiciona a aplicacao web em `front/copmed-web/`, separada da extensao Chrome.
+A web consome o backend Flask compartilhado em `API/` e usa a mesma base de pacientes da API.
+
+1. Suba o backend:
+
+   ```bash
+   cd API
+   python server.py
+   ```
+
+2. Em outro terminal, navegue para a web:
+
+   ```bash
+   cd front/copmed-web
+   ```
+
+3. Instale as dependencias e rode o Vite:
+
+   ```bash
+   npm install
+   npm run dev
+   ```
+
+4. Configure a URL da API, se necessario, criando `front/copmed-web/.env`:
+
+   ```bash
+   VITE_API_URL=http://localhost:3001
+   ```
+
+Por padrao, a web usa `http://localhost:3001` como backend e roda em `http://localhost:5174`.
+
+### Extensao Chrome
+
 1. Navegue para o diretório `front/copmed-extension`:
 
    ```bash
