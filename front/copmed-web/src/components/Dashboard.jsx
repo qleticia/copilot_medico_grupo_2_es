@@ -14,25 +14,24 @@ function Dashboard({ patients, patientsLoading, onGoToPatients }) {
         <article className="metric-card">
           <Database size={22} />
           <div>
-            <span>Origem dos dados</span>
-            <strong>API Flask</strong>
+            <span>Informações</span>
+            <strong>Centralizadas</strong>
           </div>
         </article>
         <article className="metric-card">
           <ClipboardPlus size={22} />
           <div>
             <span>Cadastro</span>
-            <strong>Compartilhado</strong>
+            <strong>Organizado</strong>
           </div>
         </article>
       </div>
 
       <section className="panel dashboard-panel">
         <div>
-          <h2>Base única de pacientes</h2>
+          <h2>Acompanhamento clínico centralizado</h2>
           <p>
-            A aplicação web está conectada ao backend em `API/`. Pacientes cadastrados aqui são persistidos na mesma base
-            que será reaproveitada pela extensão Chrome.
+            Organize pacientes, atendimentos e informações importantes para acompanhar cada consulta com mais praticidade.
           </p>
         </div>
         <button className="primary-button compact" type="button" onClick={onGoToPatients}>

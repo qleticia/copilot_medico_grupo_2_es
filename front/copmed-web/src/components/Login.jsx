@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Activity, LockKeyhole, Mail, ShieldCheck, UserRound } from 'lucide-react';
-import { API_URL, login } from '../api';
+import { Activity, ClipboardList, HeartPulse, LockKeyhole, Mail, UserRound } from 'lucide-react';
+import { login } from '../api';
 
 const profiles = [
   { value: 'medico', label: 'Médico' },
@@ -54,21 +54,21 @@ function Login({ onLoginSuccess }) {
           <span>Copilot Médico</span>
         </div>
         <div className="brand-copy">
-          <h1>Portal clínico integrado</h1>
-          <p>Cadastro, listagem e acompanhamento de pacientes usando o backend Flask compartilhado.</p>
+          <h1>Copilot Médico</h1>
+          <p>Organize pacientes, atendimentos e informações importantes em um só lugar.</p>
         </div>
         <div className="trust-list">
-          <span><ShieldCheck size={18} /> API configurável via Vite</span>
-          <span><LockKeyhole size={18} /> Token Bearer armazenado após login</span>
-          <span><UserRound size={18} /> Mesma base de pacientes da extensão</span>
+          <span><HeartPulse size={18} /> Acompanhe seus pacientes com mais praticidade.</span>
+          <span><ClipboardList size={18} /> Consulte registros de atendimento.</span>
+          <span><UserRound size={18} /> Centralize o acompanhamento clínico.</span>
         </div>
       </section>
 
       <section className="login-panel login-card" aria-labelledby="login-title">
         <div>
-          <p className="eyebrow">Backend: {API_URL}</p>
-          <h2 id="login-title">Entrar</h2>
-          <p className="muted">Use um usuário configurado no backend para acessar a web.</p>
+          <p className="eyebrow">Copilot Médico</p>
+          <h2 id="login-title">Entrar no sistema</h2>
+          <p className="muted">Acesse o painel para acompanhar pacientes e atendimentos.</p>
         </div>
 
         {error && <div className="alert alert-error">{error}</div>}

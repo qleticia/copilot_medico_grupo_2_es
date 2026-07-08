@@ -75,7 +75,7 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
         <div className="panel-heading">
           <div>
             <h2>Pacientes</h2>
-            <p>Dados carregados de `GET /api/all-patients`.</p>
+            <p>Acompanhe seus pacientes com mais praticidade.</p>
           </div>
           <button className="icon-button" type="button" onClick={onRefresh} title="Atualizar lista">
             <RefreshCcw size={18} />
@@ -118,7 +118,7 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
           {!loading && filteredPatients.length === 0 && (
             <div className="empty-state">
               <UserRound size={22} />
-              <span>Nenhum paciente encontrado no backend.</span>
+              <span>Nenhum paciente encontrado.</span>
             </div>
           )}
 
@@ -154,7 +154,7 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
             <div className="info-strip">
               <div>
                 <span>Cadastro</span>
-                <strong>Backend compartilhado</strong>
+                <strong>Acompanhamento clínico</strong>
               </div>
               <div>
                 <span>Consultas</span>
