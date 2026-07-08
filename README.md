@@ -170,7 +170,5 @@ pip install requirements.txt
    docker-compose up --build
 3. Backend disponível em http://localhost:3001
 
-//teste
-
 
 ---
