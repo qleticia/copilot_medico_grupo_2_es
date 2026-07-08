@@ -188,6 +188,22 @@ def get_consultation_chat_history(patient_id: str, consultation_id: str) -> list
                 return consultation.get("chat_history", [])
     return []
 
+def consultation_belongs_to_patient(patient_id: str, consultation_id: str) -> bool:
+    """
+    Verifica se uma consulta pertence ao paciente informado.
+    """
+    if not consultation_id:
+        return False
+
+    patient_data = get_patient_data(patient_id)
+    if not patient_data:
+        return False
+
+    return any(
+        consultation.get("id") == consultation_id
+        for consultation in patient_data.get("consultations", [])
+    )
+
 def add_message_to_consultation_history(patient_id: str, consultation_id: str, role: str, text: str):
     """
     Adiciona uma nova mensagem (do usuário ou do modelo) ao histórico de chat
@@ -219,7 +235,66 @@ def add_message_to_consultation_history(patient_id: str, consultation_id: str, r
 
 
 
-def add_transcription_log_to_patient(patient_id, consultation_id, text, duration_seconds, dialogue=None):
+def add_extension_data_to_patient(
+    patient_id: str,
+    content,
+    consultation_id: str = None,
+    source_url: str = None,
+    created_at: str = None,
+):
+    """
+    Salva dados estruturados capturados pela extensao dentro do registro do paciente.
+    """
+    db = load_database()
+    patient_data = db.get(patient_id)
+
+    if not patient_data:
+        print(f"Erro: Paciente {patient_id} nao encontrado para salvar dados da extensao.")
+        return None
+
+    if "extension_data" not in patient_data or not isinstance(patient_data.get("extension_data"), list):
+        patient_data["extension_data"] = []
+
+    entry_created_at = created_at if isinstance(created_at, str) and created_at.strip() else datetime.now().isoformat()
+    entry = {
+        "id": str(uuid.uuid4()),
+        "patient_id": patient_id,
+        "consultation_id": consultation_id,
+        "source": "extension",
+        "source_url": source_url,
+        "type": "extracted_data",
+        "content": content,
+        "created_at": entry_created_at,
+        "timestamp": entry_created_at,
+    }
+
+    patient_data["extension_data"].insert(0, entry)
+    save_database(db)
+    return entry
+
+
+def get_patient_extension_data(patient_id):
+    """
+    Recupera dados estruturados capturados pela extensao para um paciente.
+    """
+    patient_data = get_patient_data(patient_id)
+
+    if patient_data and isinstance(patient_data.get("extension_data"), list):
+        return patient_data["extension_data"]
+
+    return []
+
+
+def add_transcription_log_to_patient(
+    patient_id,
+    consultation_id,
+    text,
+    duration_seconds,
+    dialogue=None,
+    source="extension",
+    created_at=None,
+    audio_metadata=None,
+):
     """
     Salva uma transcrição no histórico exclusivo de transcrições do paciente.
 
@@ -246,13 +321,19 @@ def add_transcription_log_to_patient(patient_id, consultation_id, text, duration
     secs = int(duration_seconds % 60)
     duration_fmt = f"{mins}:{secs:02d}"
 
+    entry_created_at = created_at if isinstance(created_at, str) and created_at.strip() else datetime.now().isoformat()
     log_entry = {
         "id": str(uuid.uuid4()),
+        "patient_id": patient_id,
         "consultation_id": consultation_id,
+        "source": source,
+        "type": "transcription",
         "text": text,  # Texto corrido (fallback)
         "dialogue": dialogue,  # NOVA CAMPO: Estrutura rica (Médico/Paciente)
         "duration": duration_fmt,
-        "timestamp": datetime.now().isoformat()
+        "audio": audio_metadata if audio_metadata is not None else {"persisted": False},
+        "created_at": entry_created_at,
+        "timestamp": entry_created_at
     }
 
     # Adiciona no início da lista (mais recente primeiro)
