@@ -156,6 +156,129 @@ def test_extension_extracted_data_saves_user_and_ai_messages(client, monkeypatch
     assert history[1]["role"] == "model"
     assert history[1]["parts"][0]["text"] == payload["ai_response"]
 
+    extension_items = pdb.get_patient_extension_data(pid)
+    assert len(extension_items) == 1
+    assert extension_items[0]["patient_id"] == pid
+    assert extension_items[0]["consultation_id"] == cid
+    assert extension_items[0]["source"] == "extension"
+    assert extension_items[0]["type"] == "extracted_data"
+
+
+def test_extension_extracted_data_accepts_camel_case_without_consultation(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+
+    resp = client.post(
+        '/api/extension/extracted-data',
+        json={
+            "patientId": pid,
+            "sourceUrl": "https://sistema-prontuario.com/atendimento",
+            "createdAt": "2026-07-07T12:00:00",
+            "extractedData": {
+                "peso": "70",
+                "queixa": ["dor", "febre"],
+            },
+        },
+        headers=_auth_headers(monkeypatch, profile="medico"),
+    )
+
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["status"] == "success"
+    assert payload["patient_id"] == pid
+    assert payload["consultation_id"] is None
+    assert payload["ai_response"] is None
+    assert payload["extension_data"]["source"] == "extension"
+    assert payload["extension_data"]["created_at"] == "2026-07-07T12:00:00"
+    assert payload["extension_data"]["content"]["peso"] == "70"
+
+
+def test_extension_extracted_data_rejects_consultation_from_other_patient(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    other_pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+    pdb.ensure_patient_exists(other_pid, name="Outro")
+    other_cid = pdb.add_consultation_to_patient(other_pid, "Consulta X")
+
+    resp = client.post(
+        '/api/extension/extracted-data',
+        json={
+            "patient_id": pid,
+            "consultation_id": other_cid,
+            "extracted_content": [{"role": "peso", "text": "70"}],
+        },
+        headers=_auth_headers(monkeypatch, profile="medico"),
+    )
+
+    assert resp.status_code == 404
+    assert resp.get_json()["status"] == "error"
+
+
+def test_legacy_extracted_data_alias_saves_structured_data(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+
+    resp = client.post(
+        '/api/extracted-data',
+        json={
+            "patient_id": pid,
+            "extracted_data": {"pressao": "120/80"},
+        },
+        headers=_auth_headers(monkeypatch, profile="medico"),
+    )
+
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["status"] == "success"
+    assert payload["extension_data"]["content"]["pressao"] == "120/80"
+
+
+def test_get_patient_extension_data_returns_extension_items_and_transcriptions(client, monkeypatch):
+    pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+    saved = pdb.add_extension_data_to_patient(
+        patient_id=pid,
+        content=[{"role": "peso", "text": "70"}],
+    )
+    transcription = pdb.add_transcription_log_to_patient(
+        patient_id=pid,
+        consultation_id=None,
+        text="transcricao",
+        duration_seconds=10,
+    )
+
+    resp = client.get(f'/api/patients/{pid}/extension-data')
+
+    payload = resp.get_json()
+    assert resp.status_code == 200
+    assert payload["status"] == "success"
+    assert payload["patient_id"] == pid
+    assert payload["extension_data"][0]["id"] == saved["id"]
+    assert payload["transcriptions"][0]["id"] == transcription["id"]
+    assert payload["transcriptions"][0]["source"] == "extension"
+
+
+def test_transcribe_audio_rejects_consultation_from_other_patient(client):
+    pid = pdb.generate_patient_id()
+    other_pid = pdb.generate_patient_id()
+    pdb.ensure_patient_exists(pid, name="Teste")
+    pdb.ensure_patient_exists(other_pid, name="Outro")
+    other_cid = pdb.add_consultation_to_patient(other_pid, "Consulta X")
+
+    resp = client.post(
+        '/api/transcribe_audio',
+        data={
+            "patient_id": pid,
+            "consultation_id": other_cid,
+            "duration": "1",
+            "audio_file": (io.BytesIO(b"not-a-real-wav"), "recording.wav"),
+        },
+        content_type='multipart/form-data',
+    )
+
+    assert resp.status_code == 404
+    assert resp.get_json()["status"] == "error"
+
 
 def test_create_and_list_consultations(client):
     # First create a patient

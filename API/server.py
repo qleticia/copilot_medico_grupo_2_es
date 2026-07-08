@@ -33,7 +33,8 @@ from backend.patient_db import (
     get_all_patients_info, ensure_patient_exists, get_patient_chat_history, 
     add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
     get_consultation_chat_history, add_message_to_consultation_history, add_transcription_log_to_patient,
-    get_patient_transcription_log
+    get_patient_transcription_log, add_extension_data_to_patient, get_patient_extension_data,
+    consultation_belongs_to_patient
     )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
@@ -85,6 +86,55 @@ def _json_error(message, status_code):
     return jsonify({"status": "error", "message": message}), status_code
 
 
+def _payload_value(data, *names):
+    for name in names:
+        if name in data:
+            return data.get(name)
+    return None
+
+
+def _optional_text(value):
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _normalize_extension_content(raw_content):
+    if isinstance(raw_content, list):
+        if not raw_content:
+            return None, "extracted_content deve ser uma lista nao vazia."
+        for index, item in enumerate(raw_content):
+            if not isinstance(item, dict):
+                return None, f"extracted_content[{index}] deve ser um objeto."
+            role = item.get("role")
+            text = item.get("text")
+            if not isinstance(role, str) or not role.strip():
+                return None, f"extracted_content[{index}].role e obrigatorio."
+            if not isinstance(text, str) or not text.strip():
+                return None, f"extracted_content[{index}].text e obrigatorio."
+        return raw_content, None
+
+    if isinstance(raw_content, dict) and raw_content:
+        return raw_content, None
+
+    if isinstance(raw_content, str) and raw_content.strip():
+        return raw_content.strip(), None
+
+    return None, "extracted_content deve ser uma lista nao vazia, objeto nao vazio ou texto."
+
+
+def _normalize_transcriptions_for_extension_response(logs):
+    normalized = []
+    for log in logs:
+        item = dict(log)
+        item.setdefault("source", "extension")
+        item.setdefault("type", "transcription")
+        item.setdefault("created_at", item.get("timestamp"))
+        item.setdefault("audio", {"persisted": False})
+        normalized.append(item)
+    return normalized
+
+
 def _auth_success_response(user, profile, token, expires_in):
     return jsonify({
         "status": "success",
@@ -107,8 +157,16 @@ def _format_extension_extracted_data(extracted_content, source_url=None):
         lines.extend(["", f"Fonte: {source_url}"])
 
     lines.append("")
-    for item in extracted_content:
-        lines.append(f"{item['role'].strip()}: {item['text'].strip()}")
+    if isinstance(extracted_content, list):
+        for item in extracted_content:
+            lines.append(f"{item['role'].strip()}: {item['text'].strip()}")
+    elif isinstance(extracted_content, dict):
+        for key, value in extracted_content.items():
+            if isinstance(value, list):
+                value = ", ".join(str(item) for item in value)
+            lines.append(f"{key}: {value}")
+    else:
+        lines.append(str(extracted_content))
 
     return "\n".join(lines)
 
@@ -199,15 +257,24 @@ def transcribe_audio_route():
             return jsonify({"status": "error", "message": "Nenhum arquivo enviado."}), 400
 
         audio_file = request.files['audio_file']
-        patient_id = request.form.get('patient_id')
-        consultation_id = request.form.get('consultation_id')
+        patient_id = request.form.get('patient_id') or request.form.get('patientId')
+        consultation_id = request.form.get('consultation_id') or request.form.get('consultationId')
         # Duração estimada vinda do front (pode ser 0)
         duration_input = request.form.get('duration', 0.0, type=float)
 
-        if not patient_id or not consultation_id:
+        patient_id = patient_id.strip() if isinstance(patient_id, str) else None
+        consultation_id = consultation_id.strip() if isinstance(consultation_id, str) and consultation_id.strip() else None
+
+        if not patient_id:
             return jsonify({"status": "error", "message": "IDs obrigatórios."}), 400
 
         # 2. Salvar arquivo temporário
+        if not get_patient_data(patient_id):
+            return jsonify({"status": "error", "message": "Paciente nao encontrado."}), 404
+
+        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+            return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
+
         file_ext = '.wav'
         if audio_file.filename and '.' in audio_file.filename:
             file_ext = '.' + audio_file.filename.split('.')[-1]
@@ -280,6 +347,12 @@ def transcribe_audio_route():
             consultation_id=consultation_id,
             text=texto_final,
             duration_seconds=final_duration if final_duration > 0 else 1.0,
+            source=request.form.get('source') or "extension",
+            audio_metadata={
+                "persisted": False,
+                "filename": audio_file.filename,
+                "content_type": audio_file.content_type,
+            },
             dialogue=dialogue_structure  # <--- O PULO DO GATO ESTÁ AQUI
         )
 
@@ -422,73 +495,105 @@ def handle_chat_message():
         return jsonify({"status": "error", "message": f"Erro interno do servidor: {e}"}), 500
 
 
-@app.route('/api/extension/extracted-data', methods=['POST'])
-@roles_required("administrador", "medico")
-def handle_extension_extracted_data():
+def _handle_extension_extracted_data_request():
     try:
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return _json_error("Corpo JSON invalido.", 400)
 
-        patient_id = data.get("patient_id")
-        consultation_id = data.get("consultation_id")
-        source_url = data.get("source_url")
-        extracted_content = data.get("extracted_content")
+        patient_id = _payload_value(data, "patient_id", "patientId")
+        consultation_id = _payload_value(data, "consultation_id", "consultationId")
+        source_url = _payload_value(data, "source_url", "sourceUrl")
+        created_at = _payload_value(data, "created_at", "createdAt")
+        raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
 
         if not isinstance(patient_id, str) or not patient_id.strip():
             return _json_error("patient_id e obrigatorio.", 400)
-        if not isinstance(consultation_id, str) or not consultation_id.strip():
-            return _json_error("consultation_id e obrigatorio.", 400)
         if source_url is not None and not isinstance(source_url, str):
             return _json_error("source_url deve ser texto.", 400)
-        if not isinstance(extracted_content, list) or not extracted_content:
-            return _json_error("extracted_content deve ser uma lista nao vazia.", 400)
+        if created_at is not None and not isinstance(created_at, str):
+            return _json_error("created_at deve ser texto.", 400)
 
-        for index, item in enumerate(extracted_content):
-            if not isinstance(item, dict):
-                return _json_error(f"extracted_content[{index}] deve ser um objeto.", 400)
-            role = item.get("role")
-            text = item.get("text")
-            if not isinstance(role, str) or not role.strip():
-                return _json_error(f"extracted_content[{index}].role e obrigatorio.", 400)
-            if not isinstance(text, str) or not text.strip():
-                return _json_error(f"extracted_content[{index}].text e obrigatorio.", 400)
+        extracted_content, content_error = _normalize_extension_content(raw_content)
+        if content_error:
+            return _json_error(content_error, 400)
 
         patient_id = patient_id.strip()
-        consultation_id = consultation_id.strip()
-        source_url = source_url.strip() if isinstance(source_url, str) and source_url.strip() else None
+        consultation_id = _optional_text(consultation_id)
+        source_url = _optional_text(source_url)
+        created_at = _optional_text(created_at)
 
         patient_data = get_patient_data(patient_id)
         if not patient_data:
             return _json_error("Paciente nao encontrado.", 404)
 
-        consultation_exists = any(
-            consultation.get("id") == consultation_id
-            for consultation in patient_data.get("consultations", [])
-        )
-        if not consultation_exists:
+        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
             return _json_error("Consulta nao encontrada.", 404)
 
-        formatted_text = _format_extension_extracted_data(extracted_content, source_url)
-        filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
+        extension_entry = add_extension_data_to_patient(
+            patient_id=patient_id,
+            consultation_id=consultation_id,
+            source_url=source_url,
+            content=extracted_content,
+            created_at=created_at,
+        )
+        if not extension_entry:
+            return _json_error("Falha ao salvar dados da extensao.", 500)
 
-        add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_text)
+        ai_response_text = None
+        if consultation_id:
+            formatted_text = _format_extension_extracted_data(extracted_content, source_url)
+            filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
 
-        ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
-
-        add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
+            add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_text)
+            ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
+            add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
 
         return jsonify({
             "status": "success",
             "ai_response": ai_response_text,
             "patient_id": patient_id,
-            "consultation_id": consultation_id
+            "consultation_id": consultation_id,
+            "extension_data": extension_entry
         }), 200
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"status": "error", "message": f"Erro interno ao processar dados da extensao: {e}"}), 500
+
+
+@app.route('/api/extension/extracted-data', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_extension_extracted_data():
+    return _handle_extension_extracted_data_request()
+
+
+@app.route('/api/extracted-data', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_legacy_extracted_data():
+    return _handle_extension_extracted_data_request()
+
+
+@app.route('/api/patients/<patient_id>/extension-data', methods=['GET'])
+def get_patient_extension_data_api(patient_id):
+    try:
+        patient_data = get_patient_data(patient_id)
+        if not patient_data:
+            return _json_error("Paciente nao encontrado.", 404)
+
+        return jsonify({
+            "status": "success",
+            "patient_id": patient_id,
+            "extension_data": get_patient_extension_data(patient_id),
+            "transcriptions": _normalize_transcriptions_for_extension_response(
+                get_patient_transcription_log(patient_id)
+            )
+        }), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro ao recuperar dados da extensao: {e}"}), 500
 
 
 # Endpoint de Upload de PDF
