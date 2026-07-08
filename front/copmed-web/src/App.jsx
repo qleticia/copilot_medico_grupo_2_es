@@ -7,13 +7,13 @@ import PatientsPage from './components/PatientsPage.jsx';
 import PlaceholderPage from './components/PlaceholderPage.jsx';
 
 const views = {
-  dashboard: { title: 'Dashboard' },
+  dashboard: { title: 'Copilot Médico' },
   pacientes: { title: 'Pacientes' },
-  agendamentos: { title: 'Agendamentos' },
-  analise: { title: 'Análise com IA' },
+  agendamentos: { title: 'Agenda' },
+  analise: { title: 'Consulta' },
   atendimentos: { title: 'Atendimentos' },
-  relatorios: { title: 'Relatórios' },
-  configuracoes: { title: 'Configurações' },
+  relatorios: { title: 'Histórico' },
+  configuracoes: { title: 'Ajustes' },
 };
 
 function App() {
@@ -100,36 +100,36 @@ function App() {
 
       {activeView === 'agendamentos' && (
         <PlaceholderPage
-          title="Agendamentos"
-          description="Funcionalidade prevista. A referência possui uma tela de agenda, mas o backend oficial ainda não expõe rotas de agendamentos nesta etapa."
+          title="Agenda"
+          description="Visualize e organize os próximos atendimentos em um só lugar."
         />
       )}
 
       {activeView === 'analise' && (
         <PlaceholderPage
-          title="Análise com IA"
-          description="Estrutura preparada para consumir o backend compartilhado. A análise completa será conectada aos fluxos de consultas, PDF, áudio e recomendações em uma próxima task."
+          title="Consulta"
+          description="Visualize informações importantes da consulta e acompanhe os registros do paciente."
         />
       )}
 
       {activeView === 'atendimentos' && (
         <PlaceholderPage
           title="Atendimentos"
-          description="Funcionalidade prevista. Hoje a visualização inicial de atendimentos está disponível dentro do detalhe do paciente, usando as consultas salvas no backend."
+          description="Consulte registros de atendimento e acompanhe a evolução clínica dos pacientes."
         />
       )}
 
       {activeView === 'relatorios' && (
         <PlaceholderPage
-          title="Relatórios"
-          description="Funcionalidade prevista para acompanhar indicadores clínicos e operacionais quando as rotas correspondentes estiverem disponíveis."
+          title="Histórico"
+          description="Acompanhe informações importantes registradas ao longo do cuidado."
         />
       )}
 
       {activeView === 'configuracoes' && (
         <PlaceholderPage
-          title="Configurações"
-          description="Funcionalidade prevista para preferências de conta, instituição e integrações."
+          title="Ajustes"
+          description="Gerencie preferências básicas do painel."
         />
       )}
     </Layout>

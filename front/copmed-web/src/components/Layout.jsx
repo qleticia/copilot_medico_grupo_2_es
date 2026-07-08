@@ -10,13 +10,13 @@ import {
 } from 'lucide-react';
 
 const navItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
   { id: 'pacientes', label: 'Pacientes', icon: UsersRound },
-  { id: 'agendamentos', label: 'Agendamentos', icon: CalendarDays },
-  { id: 'analise', label: 'Análise com IA', icon: Sparkles },
+  { id: 'agendamentos', label: 'Agenda', icon: CalendarDays },
+  { id: 'analise', label: 'Consulta', icon: Sparkles },
   { id: 'atendimentos', label: 'Atendimentos', icon: ClipboardList },
-  { id: 'relatorios', label: 'Relatórios', icon: BarChart3 },
-  { id: 'configuracoes', label: 'Configurações', icon: Settings },
+  { id: 'relatorios', label: 'Histórico', icon: BarChart3 },
+  { id: 'configuracoes', label: 'Ajustes', icon: Settings },
 ];
 
 function Layout({ activeView, onViewChange, onLogout, user, profile, pageTitle, children }) {
@@ -27,7 +27,7 @@ function Layout({ activeView, onViewChange, onLogout, user, profile, pageTitle, 
           <div className="brand-icon">CM</div>
           <div>
             <strong>Copilot Médico</strong>
-            <span>Web</span>
+            <span>Painel</span>
           </div>
         </div>
 
