@@ -405,7 +405,8 @@ select {
 }
 
 .patients-list,
-.consultation-list {
+.consultation-list,
+.extension-list {
   display: grid;
   gap: 8px;
 }
@@ -463,13 +464,21 @@ select {
   margin-bottom: 18px;
 }
 
+.detail-header > div {
+  min-width: 0;
+}
+
 .detail-header h2 {
   margin: 0 0 6px;
 }
 
+.detail-refresh-button {
+  margin-left: auto;
+}
+
 .info-strip {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin-bottom: 22px;
 }
@@ -500,6 +509,12 @@ select {
   margin: 0;
 }
 
+.detail-section {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+
 .consultation-item {
   display: flex;
   justify-content: space-between;
@@ -516,6 +531,115 @@ select {
 
 .consultation-item small {
   color: #64748b;
+}
+
+.extension-card {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.extension-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.extension-card-header div {
+  display: grid;
+  gap: 4px;
+}
+
+.extension-card-header small,
+.metadata-row span,
+.content-row span,
+.metadata-grid span {
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.source-pill {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #dff7f1;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.metadata-row {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.metadata-row a {
+  color: #0f766e;
+  overflow-wrap: anywhere;
+}
+
+.structured-content,
+.dialogue-list {
+  display: grid;
+  gap: 8px;
+}
+
+.content-row {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.content-row strong,
+.metadata-grid strong,
+.dialogue-line p,
+.transcription-text {
+  overflow-wrap: anywhere;
+}
+
+.audio-player {
+  width: 100%;
+}
+
+.metadata-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metadata-grid div {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.dialogue-line {
+  display: grid;
+  gap: 5px;
+  padding: 11px;
+  border-left: 3px solid #0f766e;
+  background: #f8fafc;
+}
+
+.dialogue-line p,
+.transcription-text {
+  margin: 0;
+  color: #334155;
+  line-height: 1.6;
+  white-space: pre-wrap;
 }
 
 .empty-state {
@@ -576,7 +700,8 @@ select {
   .topbar,
   .dashboard-panel,
   .placeholder-panel,
-  .consultation-item {
+  .consultation-item,
+  .extension-card-header {
     align-items: stretch;
     flex-direction: column;
   }
@@ -587,6 +712,8 @@ select {
 
   .create-patient-form,
   .info-strip,
+  .content-row,
+  .metadata-grid,
   .sidebar-nav {
     grid-template-columns: 1fr;
   }

@@ -83,3 +83,7 @@ export function createPatient(token, payload) {
 export function getPatientConsultations(token, patientId) {
   return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/consultations`, { token });
 }
+
+export function getPatientExtensionData(token, patientId) {
+  return apiRequest(`/api/patients/${encodeURIComponent(patientId)}/extension-data`, { token });
+}
