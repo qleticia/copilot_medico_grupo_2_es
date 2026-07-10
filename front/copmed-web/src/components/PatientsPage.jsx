@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, Loader2, Plus, RefreshCcw, Search, UserRound } from 'lucide-react';
-import { getPatientConsultations } from '../api';
+import { CalendarClock, ClipboardList, FileText, Loader2, Mic2, Plus, RefreshCcw, Search, UserRound } from 'lucide-react';
+import { API_URL, getPatientConsultations, getPatientExtensionData } from '../api';
 
 function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePatient }) {
   const [search, setSearch] = useState('');
@@ -9,6 +9,10 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
   const [saving, setSaving] = useState(false);
   const [consultations, setConsultations] = useState([]);
   const [consultationsState, setConsultationsState] = useState({ loading: false, error: '' });
+  const [extensionItems, setExtensionItems] = useState([]);
+  const [transcriptions, setTranscriptions] = useState([]);
+  const [extensionState, setExtensionState] = useState({ loading: false, error: '' });
+  const [patientRefreshKey, setPatientRefreshKey] = useState(0);
 
   const filteredPatients = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -51,7 +55,43 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
     return () => {
       ignore = true;
     };
-  }, [selectedPatient, token]);
+  }, [selectedPatient, token, patientRefreshKey]);
+
+  useEffect(() => {
+    if (!selectedPatient) {
+      setExtensionItems([]);
+      setTranscriptions([]);
+      return;
+    }
+
+    let ignore = false;
+    async function loadExtensionData() {
+      setExtensionState({ loading: true, error: '' });
+      try {
+        const data = await getPatientExtensionData(token, selectedPatient.id);
+        if (!ignore && data.patient_id === selectedPatient.id) {
+          setExtensionItems(Array.isArray(data.extension_data) ? data.extension_data : []);
+          setTranscriptions(Array.isArray(data.transcriptions) ? data.transcriptions : []);
+          setExtensionState({ loading: false, error: '' });
+        } else if (!ignore) {
+          setExtensionItems([]);
+          setTranscriptions([]);
+          setExtensionState({ loading: false, error: 'A API retornou dados de outro paciente.' });
+        }
+      } catch (err) {
+        if (!ignore) {
+          setExtensionItems([]);
+          setTranscriptions([]);
+          setExtensionState({ loading: false, error: err.message });
+        }
+      }
+    }
+
+    loadExtensionData();
+    return () => {
+      ignore = true;
+    };
+  }, [selectedPatient, token, patientRefreshKey]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -67,6 +107,10 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleRefreshPatientData() {
+    setPatientRefreshKey((current) => current + 1);
   }
 
   return (
@@ -149,6 +193,15 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
                 <h2>{selectedPatient.name}</h2>
                 <code>{selectedPatient.id}</code>
               </div>
+              <button
+                className="icon-button detail-refresh-button"
+                type="button"
+                onClick={handleRefreshPatientData}
+                title="Atualizar dados do paciente"
+                disabled={consultationsState.loading || extensionState.loading}
+              >
+                <RefreshCcw size={18} />
+              </button>
             </div>
 
             <div className="info-strip">
@@ -160,9 +213,17 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
                 <span>Consultas</span>
                 <strong>{consultationsState.loading ? '...' : consultations.length}</strong>
               </div>
+              <div>
+                <span>Dados da extensão</span>
+                <strong>{extensionState.loading ? '...' : extensionItems.length}</strong>
+              </div>
+              <div>
+                <span>Transcrições</span>
+                <strong>{extensionState.loading ? '...' : transcriptions.length}</strong>
+              </div>
             </div>
 
-            <section>
+            <section className="detail-section">
               <div className="section-heading">
                 <CalendarClock size={19} />
                 <h3>Atendimentos do paciente</h3>
@@ -198,6 +259,121 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
                 </div>
               )}
             </section>
+
+            <section className="detail-section">
+              <div className="section-heading">
+                <ClipboardList size={19} />
+                <h3>Dados importados da extensão</h3>
+              </div>
+
+              {extensionState.error && <div className="alert alert-error">{extensionState.error}</div>}
+
+              {extensionState.loading && (
+                <div className="empty-state">
+                  <Loader2 className="spin" size={22} />
+                  <span>Carregando dados da extensão...</span>
+                </div>
+              )}
+
+              {!extensionState.loading && extensionItems.length === 0 && (
+                <div className="empty-state">
+                  <ClipboardList size={22} />
+                  <span>Nenhum dado importado da extensão para este paciente.</span>
+                </div>
+              )}
+
+              {!extensionState.loading && extensionItems.length > 0 && (
+                <div className="extension-list">
+                  {extensionItems.map((item, index) => (
+                    <article key={item.id || `${item.created_at || 'extension'}-${index}`} className="extension-card">
+                      <div className="extension-card-header">
+                        <div>
+                          <strong>Registro importado</strong>
+                          <small>{formatDate(item.created_at || item.timestamp)}</small>
+                        </div>
+                        <span className="source-pill">Origem: extensão</span>
+                      </div>
+                      {item.consultation_id && (
+                        <div className="metadata-row">
+                          <span>Atendimento</span>
+                          <code>{item.consultation_id}</code>
+                        </div>
+                      )}
+                      {item.source_url && (
+                        <div className="metadata-row">
+                          <span>Fonte</span>
+                          <a href={item.source_url} target="_blank" rel="noreferrer">{item.source_url}</a>
+                        </div>
+                      )}
+                      <div className="structured-content">
+                        {renderExtensionContent(item.content)}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <div className="section-heading">
+                <Mic2 size={19} />
+                <h3>Áudios e transcrições</h3>
+              </div>
+
+              {extensionState.loading && (
+                <div className="empty-state">
+                  <Loader2 className="spin" size={22} />
+                  <span>Carregando transcrições...</span>
+                </div>
+              )}
+
+              {!extensionState.loading && transcriptions.length === 0 && (
+                <div className="empty-state">
+                  <FileText size={22} />
+                  <span>Nenhuma transcrição disponível para este paciente.</span>
+                </div>
+              )}
+
+              {!extensionState.loading && transcriptions.length > 0 && (
+                <div className="extension-list">
+                  {transcriptions.map((transcription, index) => {
+                    const audioSrc = getAudioSource(transcription.audio);
+                    return (
+                      <article key={transcription.id || `${transcription.created_at || 'transcription'}-${index}`} className="extension-card">
+                        <div className="extension-card-header">
+                          <div>
+                            <strong>Transcrição da extensão</strong>
+                            <small>{formatDate(transcription.created_at || transcription.timestamp)}</small>
+                          </div>
+                          <span className="source-pill">Origem: {formatSource(transcription.source)}</span>
+                        </div>
+
+                        {audioSrc && (
+                          <audio className="audio-player" controls src={audioSrc}>
+                            Seu navegador não suporta reprodução de áudio.
+                          </audio>
+                        )}
+
+                        {renderAudioMetadata(transcription.audio, transcription.duration)}
+
+                        {transcription.dialogue?.length > 0 ? (
+                          <div className="dialogue-list">
+                            {transcription.dialogue.map((line, lineIndex) => (
+                              <div key={`${line.speaker || 'fala'}-${lineIndex}`} className="dialogue-line">
+                                <strong>{line.speaker || line.role || 'Fala'}</strong>
+                                <p>{line.text || line.content || '-'}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="transcription-text">{transcription.text || 'Transcrição sem texto informado.'}</p>
+                        )}
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           </>
         ) : (
           <div className="empty-state tall">
@@ -208,6 +384,99 @@ function PatientsPage({ token, patients, loading, error, onRefresh, onCreatePati
       </div>
     </section>
   );
+}
+
+function renderExtensionContent(content) {
+  if (Array.isArray(content)) {
+    if (content.length === 0) return <p className="muted">Nenhum conteúdo estruturado informado.</p>;
+
+    return content.map((item, index) => {
+      if (item && typeof item === 'object') {
+        const label = item.role || item.label || item.key || item.campo || `Item ${index + 1}`;
+        const value = item.text || item.value || item.valor || item.content || JSON.stringify(item);
+        return (
+          <div key={`${label}-${index}`} className="content-row">
+            <span>{label}</span>
+            <strong>{String(value)}</strong>
+          </div>
+        );
+      }
+
+      return <p key={`content-${index}`}>{String(item)}</p>;
+    });
+  }
+
+  if (content && typeof content === 'object') {
+    const entries = Object.entries(content);
+    if (entries.length === 0) return <p className="muted">Nenhum conteúdo estruturado informado.</p>;
+
+    return entries.map(([key, value]) => (
+      <div key={key} className="content-row">
+        <span>{formatLabel(key)}</span>
+        <strong>{formatValue(value)}</strong>
+      </div>
+    ));
+  }
+
+  return <p>{content ? String(content) : 'Nenhum conteúdo estruturado informado.'}</p>;
+}
+
+function renderAudioMetadata(audio, duration) {
+  const metadata = audio && typeof audio === 'object' ? audio : {};
+  const entries = Object.entries(metadata).filter(([key, value]) => (
+    value !== null && value !== undefined && value !== '' && !['url', 'file_url', 'path'].includes(key)
+  ));
+
+  if (duration) {
+    entries.unshift(['duration', duration]);
+  }
+
+  if (entries.length === 0) {
+    return (
+      <div className="metadata-grid">
+        <div>
+          <span>Áudio</span>
+          <strong>Metadados não informados</strong>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="metadata-grid">
+      {entries.map(([key, value]) => (
+        <div key={key}>
+          <span>{formatLabel(key)}</span>
+          <strong>{formatValue(value)}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function getAudioSource(audio) {
+  if (!audio || typeof audio !== 'object') return '';
+  const url = audio.url || audio.file_url || audio.path;
+  if (!url || typeof url !== 'string') return '';
+  if (/^https?:\/\//i.test(url) || url.startsWith('data:')) return url;
+  return `${API_URL}${url.startsWith('/') ? url : `/${url}`}`;
+}
+
+function formatLabel(value) {
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatSource(value) {
+  return value === 'extension' || !value ? 'extensão' : value;
+}
+
+function formatValue(value) {
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Não';
+  if (Array.isArray(value)) return value.map(formatValue).join(', ');
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 
 function formatDate(value) {
