@@ -45,7 +45,7 @@ export const executeScriptOnActiveTab = async (selector: string, index: number =
                         target: { tabId: tabId },
                         function: extractTextFromElement,
                         args: [selector, index],      
-                    } as unknown as chrome.scripting.ScriptInjection<any[], unknown>, // Type assertion mantido
+                    } as unknown as chrome.scripting.ScriptInjection<[string, number], string | null>, // Type assertion mantido
                     (injectionResults) => {
                         // Verifica se há resultados e se o resultado não é indefinido ou null
                         // Converte explicitamente para string ou null para corresponder ao tipo de Promise.
@@ -73,7 +73,7 @@ export const executeScriptOnActiveTab = async (selector: string, index: number =
  * @param args Argumentos a serem passados para a função 'func'.
  * @returns Uma Promise que resolve com o resultado da função 'func' ou undefined em caso de erro.
  */
-export async function executeArbitraryScriptOnActiveTab<T, Args extends any[]>(
+export async function executeArbitraryScriptOnActiveTab<T, Args extends unknown[]>(
     func: (...args: Args) => T, 
     ...args: Args 
 ): Promise<T | undefined> {

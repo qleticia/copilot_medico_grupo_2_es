@@ -217,7 +217,15 @@ def bootstrap_users_if_needed() -> None:
     create_user(email, password, settings.auth_bootstrap_name, profiles)
 
 
-def create_user(email: str, password: str, name: str, profiles: list[str]) -> dict[str, Any]:
+def create_user(
+    email: str,
+    password: str,
+    name: str,
+    profiles: list[str],
+    *,
+    active: bool = True,
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     email = normalize_email(email)
     if not is_valid_email(email):
         raise ValueError("Email invalido")
@@ -247,12 +255,50 @@ def create_user(email: str, password: str, name: str, profiles: list[str]) -> di
         "name": name or email,
         "password_hash": generate_password_hash(password),
         "profiles": normalized_profiles,
-        "active": True,
+        "active": active,
         "created_at": _utcnow().isoformat(),
     }
+    if extra_fields:
+        user.update(extra_fields)
     data["users"].append(user)
     save_users_database(data)
     return user
+
+
+def create_doctor_registration(
+    *,
+    name: Any,
+    email: Any,
+    password: Any,
+    crm: Any = None,
+    specialty: Any = None,
+) -> dict[str, Any]:
+    normalized_email = normalize_email(email)
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("Nome obrigatorio")
+    if not is_valid_email(normalized_email):
+        raise ValueError("Email invalido")
+    if not isinstance(password, str) or not password:
+        raise ValueError("Senha obrigatoria")
+
+    extra_fields = {
+        "crm": crm.strip() if isinstance(crm, str) and crm.strip() else None,
+        "specialty": specialty.strip() if isinstance(specialty, str) and specialty.strip() else None,
+        "approval_status": "pending",
+        "approved_at": None,
+        "approved_by": None,
+        "rejected_at": None,
+        "rejected_by": None,
+        "rejection_reason": None,
+    }
+    return create_user(
+        normalized_email,
+        password,
+        name.strip(),
+        ["medico"],
+        active=False,
+        extra_fields=extra_fields,
+    )
 
 
 def find_user_by_email(email: str) -> dict[str, Any] | None:
@@ -278,6 +324,25 @@ def sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def sanitize_doctor_request(user: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": user.get("id"),
+        "email": user.get("email"),
+        "name": user.get("name"),
+        "profiles": normalize_profiles(user.get("profiles")),
+        "active": bool(user.get("active", True)),
+        "crm": user.get("crm"),
+        "specialty": user.get("specialty"),
+        "approval_status": get_doctor_approval_status(user),
+        "created_at": user.get("created_at"),
+        "approved_at": user.get("approved_at"),
+        "approved_by": user.get("approved_by"),
+        "rejected_at": user.get("rejected_at"),
+        "rejected_by": user.get("rejected_by"),
+        "rejection_reason": user.get("rejection_reason"),
+    }
+
+
 def get_profile_details(profile: str) -> dict[str, Any]:
     normalized = normalize_profile(profile)
     permissions = sorted(PROFILE_PERMISSIONS.get(normalized, set()))
@@ -288,7 +353,7 @@ def get_profile_details(profile: str) -> dict[str, Any]:
     }
 
 
-def authenticate_user(email: Any, password: Any) -> dict[str, Any] | None:
+def authenticate_user(email: Any, password: Any, *, require_active: bool = True) -> dict[str, Any] | None:
     normalized_email = normalize_email(email)
     if not is_valid_email(normalized_email):
         return None
@@ -296,17 +361,111 @@ def authenticate_user(email: Any, password: Any) -> dict[str, Any] | None:
         return None
 
     user = find_user_by_email(normalized_email)
-    if not user or not user.get("active", True):
+    if not user:
         return None
     if not check_password_hash(user.get("password_hash", ""), password):
+        return None
+    if require_active and not user.get("active", True):
         return None
     return user
 
 
+def get_doctor_approval_status(user: dict[str, Any]) -> str:
+    status = user.get("approval_status")
+    if status in {"pending", "approved", "rejected"}:
+        return status
+    return "approved" if user.get("active", True) else "pending"
+
+
+def validate_user_profile_access(user: dict[str, Any], profile: str) -> None:
+    normalized_profile = normalize_profile(profile)
+    if not normalized_profile:
+        raise AuthError("Perfil e obrigatorio.", 400)
+    if normalized_profile not in normalize_profiles(user.get("profiles")):
+        raise AuthError("Perfil nao permitido para este usuario.", 403)
+
+    if normalized_profile == "medico":
+        approval_status = get_doctor_approval_status(user)
+        if approval_status == "pending":
+            raise AuthError("Cadastro aguardando aprovação do administrador.", 403)
+        if approval_status == "rejected":
+            raise AuthError("Cadastro rejeitado. Entre em contato com a administração.", 403)
+        if approval_status != "approved" or not user.get("active", True):
+            raise AuthError("Cadastro aguardando aprovação do administrador.", 403)
+        return
+
+    if not user.get("active", True):
+        raise AuthError("Conta inativa.", 403)
+
+
+def list_doctor_requests(status: str = "pending") -> list[dict[str, Any]]:
+    normalized_status = status if status in {"pending", "approved", "rejected", "all"} else "pending"
+    doctors = []
+    for user in load_users_database().get("users", []):
+        if "medico" not in normalize_profiles(user.get("profiles")):
+            continue
+        approval_status = get_doctor_approval_status(user)
+        if normalized_status != "all" and approval_status != normalized_status:
+            continue
+        doctors.append(sanitize_doctor_request(user))
+
+    status_order = {"pending": 0, "approved": 1, "rejected": 2}
+    return sorted(
+        doctors,
+        key=lambda item: (
+            status_order.get(item.get("approval_status"), 9),
+            item.get("created_at") or "",
+        ),
+        reverse=False,
+    )
+
+
+def _update_doctor_request(user_id: str, updater) -> dict[str, Any]:
+    data = load_users_database()
+    for user in data.get("users", []):
+        if user.get("id") == user_id:
+            if "medico" not in normalize_profiles(user.get("profiles")):
+                raise AuthError("Usuario nao e medico.", 400)
+            updater(user)
+            save_users_database(data)
+            return sanitize_doctor_request(user)
+    raise AuthError("Solicitacao de medico nao encontrada.", 404)
+
+
+def approve_doctor_request(user_id: str, admin_id: str) -> dict[str, Any]:
+    now = _utcnow().isoformat()
+
+    def updater(user: dict[str, Any]) -> None:
+        user["active"] = True
+        user["approval_status"] = "approved"
+        user["approved_at"] = now
+        user["approved_by"] = admin_id
+        user["rejected_at"] = None
+        user["rejected_by"] = None
+        user["rejection_reason"] = None
+
+    return _update_doctor_request(user_id, updater)
+
+
+def reject_doctor_request(user_id: str, admin_id: str, reason: Any = None) -> dict[str, Any]:
+    now = _utcnow().isoformat()
+    rejection_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
+
+    def updater(user: dict[str, Any]) -> None:
+        user["active"] = False
+        user["approval_status"] = "rejected"
+        user["rejected_at"] = now
+        user["rejected_by"] = admin_id
+        user["rejection_reason"] = rejection_reason
+        user["approved_at"] = None
+        user["approved_by"] = None
+
+    return _update_doctor_request(user_id, updater)
+
+
 def create_access_token(user: dict[str, Any], profile: str) -> tuple[str, int]:
     normalized_profile = normalize_profile(profile)
-    if normalized_profile not in normalize_profiles(user.get("profiles")):
-        raise AuthError("Perfil nao permitido para este usuario", 403)
+    validate_user_profile_access(user, normalized_profile)
 
     expires_in = int(settings.auth_token_expiration_minutes) * 60
     now = _utcnow()

@@ -211,6 +211,56 @@ select {
   border: 1px solid #fecaca;
 }
 
+.alert-success {
+  color: #166534;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.auth-tabs,
+.status-tabs {
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid #dbe3ea;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.auth-tabs button,
+.status-tabs button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 12px;
+  background: transparent;
+  color: #475569;
+  font-weight: 800;
+}
+
+.auth-tabs button.active,
+.status-tabs button.active {
+  background: #0f766e;
+  color: #fff;
+}
+
+.form-two-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.plain-input {
+  min-height: 46px;
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 12px;
+  background: #fff;
+  color: #172033;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -313,6 +363,75 @@ select {
 .page-stack {
   display: grid;
   gap: 18px;
+}
+
+.admin-doctors-panel {
+  padding: 20px;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 820px;
+}
+
+.admin-table th,
+.admin-table td {
+  padding: 12px;
+  border-bottom: 1px solid #dbe3ea;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.admin-table th {
+  color: #64748b;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.status-pill.pending {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.status-pill.approved {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-pill.rejected {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.icon-button.approve {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.icon-button.reject {
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 .summary-grid {
@@ -711,6 +830,7 @@ select {
   }
 
   .create-patient-form,
+  .form-two-columns,
   .info-strip,
   .content-row,
   .metadata-grid,

@@ -1,4 +1,4 @@
-const Form : any =  () => {
+const Form = () => {
     return (
         <div className="big-white"
         >index</div>
