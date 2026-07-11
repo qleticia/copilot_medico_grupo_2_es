@@ -157,7 +157,7 @@ export function sendAudio(formData: FormData) {
 }
 
 export function sendExtractedData(payload: Record<string, unknown>) {
-  return apiRequest("/api/extracted-data", {
+  return apiRequest("/api/extension/extracted-data", {
     method: "POST",
     body: JSON.stringify(payload),
   });
