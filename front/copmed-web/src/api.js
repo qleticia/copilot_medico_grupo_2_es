@@ -68,6 +68,33 @@ export function login({ email, password, profile }) {
   });
 }
 
+export function registerDoctor(payload) {
+  return apiRequest('/api/auth/register-doctor', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDoctorRequests(token, status = 'pending') {
+  const query = status ? `?status=${encodeURIComponent(status)}` : '';
+  return apiRequest(`/api/admin/doctor-requests${query}`, { token });
+}
+
+export function approveDoctor(token, userId) {
+  return apiRequest(`/api/admin/doctor-requests/${encodeURIComponent(userId)}/approve`, {
+    token,
+    method: 'PATCH',
+  });
+}
+
+export function rejectDoctor(token, userId, reason) {
+  return apiRequest(`/api/admin/doctor-requests/${encodeURIComponent(userId)}/reject`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ reason }),
+  });
+}
+
 export function getPatients(token) {
   return apiRequest('/api/all-patients', { token });
 }

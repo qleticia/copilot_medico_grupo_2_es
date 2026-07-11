@@ -5,9 +5,11 @@ import Layout from './components/Layout.jsx';
 import Dashboard from './components/Dashboard.jsx';
 import PatientsPage from './components/PatientsPage.jsx';
 import PlaceholderPage from './components/PlaceholderPage.jsx';
+import AdminDoctorsPage from './components/AdminDoctorsPage.jsx';
 
 const views = {
   dashboard: { title: 'Copilot Médico' },
+  medicos: { title: 'Médicos' },
   pacientes: { title: 'Pacientes' },
   agendamentos: { title: 'Agenda' },
   analise: { title: 'Consulta' },
@@ -49,7 +51,7 @@ function App() {
   function handleLoginSuccess(nextSession) {
     storeSession(nextSession);
     setSession(nextSession);
-    setActiveView('dashboard');
+    setActiveView(nextSession.profile?.name === 'administrador' ? 'medicos' : 'dashboard');
   }
 
   function handleLogout() {
@@ -85,6 +87,10 @@ function App() {
           patientsLoading={patientsState.loading}
           onGoToPatients={() => setActiveView('pacientes')}
         />
+      )}
+
+      {activeView === 'medicos' && session.profile?.name === 'administrador' && (
+        <AdminDoctorsPage token={session.token} />
       )}
 
       {activeView === 'pacientes' && (

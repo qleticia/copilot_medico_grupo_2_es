@@ -1,4 +1,6 @@
 import {
+  ChangeEvent,
+  FormEvent,
   useState,
   useEffect,
   useCallback,
@@ -16,8 +18,24 @@ import {
   FirstAidIcon,
   UserCirclePlusIcon,
 } from "@phosphor-icons/react";
-
-const SERVER_URL = "http://localhost:3001";
+import {
+  clearSession,
+  createConsultation,
+  createPatient,
+  getAuthenticatedUser,
+  getConsultationHistory,
+  getPatientConsultations,
+  getPatients,
+  getStoredSession,
+  getTranscriptionLog,
+  login as loginRequest,
+  sendAudio as sendAudioRequest,
+  sendChatMessage,
+  sendExtractedData,
+  storeSession,
+  uploadPdf,
+  type ExtensionSession,
+} from "./services/api";
 
 // --- Tipos ---
 type Message = {
@@ -38,12 +56,44 @@ type ConsultationListItem = {
   date: string;
 };
 
-// --- Componente Principal App ---
-function App() {
+type ChatHistoryMessage = {
+  role?: string;
+  parts?: Array<{ text?: string }>;
+  timestamp?: string;
+};
+
+type TranscriptionDialogueTurn = {
+  role?: string;
+  role_key?: string;
+  text?: string;
+};
+
+type TranscriptionLogItem = {
+  id?: Key;
+  consultation_id?: string | null;
+  timestamp?: string;
+  created_at?: string;
+  duration?: string;
+  text?: string;
+  text_summary?: string;
+  dialogue?: TranscriptionDialogueTurn[];
+};
+
+type WindowWithWebkitAudio = Window &
+  typeof globalThis & {
+    webkitAudioContext?: typeof AudioContext;
+  };
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
+// --- Componente Principal Autenticado ---
+function AuthenticatedApp({ onLogout }: { onLogout: () => void }) {
   const [patientId, setPatientId] = useState<string | null>(null);
   const [patientName, setPatientName] = useState<string | null>(null);
   const [consultationId, setConsultationId] = useState<string | null>(null);
-  const [_, setConsultationTitle] = useState<string | null>(null);
+  const [, setConsultationTitle] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -73,9 +123,9 @@ function App() {
   const audioBlobRef = useRef<Blob | null>(null);
   const recordingStartTimeRef = useRef<number>(0);
   const recordingDurationRef = useRef<number>(0);
-  const [transcriptionLog, setTranscriptionLog] = useState<any[]>([]); // Histórico separado
+  const [transcriptionLog, setTranscriptionLog] = useState<TranscriptionLogItem[]>([]); // Histórico separado
   const [elapsedTime, setElapsedTime] = useState<number>(0); // Cronômetro visual
-  const [viewingLog, setViewingLog] = useState<any | null>(null); // Armazena o log que está sendo lido
+  const [viewingLog, setViewingLog] = useState<TranscriptionLogItem | null>(null); // Armazena o log que está sendo lido
 
   // --- Funções de Carregamento e Persistência ---
 
@@ -97,13 +147,10 @@ function App() {
     async (pId: string, cId: string) => {
       setIsLoading(true);
       try {
-        const response = await fetch(
-          `${SERVER_URL}/api/patients/${pId}/consultations/${cId}/history`
-        );
-        const data = await response.json();
+        const data = await getConsultationHistory(pId, cId);
         if (data.status === "success") {
           const loadedMessages: Message[] = data.history.map(
-            (msg: any, index: number) => ({
+            (msg: ChatHistoryMessage, index: number) => ({
               id: `${msg.timestamp}-${index}-${Math.random()}`,
               text: msg.parts && msg.parts.length > 0 ? msg.parts[0].text : "",
               sender: msg.role === "user" ? "user" : "bot",
@@ -125,12 +172,12 @@ function App() {
             },
           ]);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro de rede ao carregar histórico:", error);
         setMessages([
           {
             id: Date.now(),
-            text: `Erro de rede ao carregar histórico: ${error.message}`,
+            text: `Erro de rede ao carregar histórico: ${getErrorMessage(error, "Erro desconhecido")}`,
             sender: "bot",
             timestamp: new Date().toISOString(),
           },
@@ -144,8 +191,7 @@ function App() {
 
   const fetchAllPatients = useCallback(async () => {
     try {
-      const response = await fetch(`${SERVER_URL}/api/all-patients`);
-      const data = await response.json();
+      const data = await getPatients();
       if (data.status === "success") {
         setAllPatients(data.patients);
       } else {
@@ -159,10 +205,7 @@ function App() {
   const fetchPatientConsultations = useCallback(async (pId: string) => {
     setIsLoading(true);
     try {
-      const response = await fetch(
-        `${SERVER_URL}/api/patients/${pId}/consultations`
-      );
-      const data = await response.json();
+      const data = await getPatientConsultations(pId);
       if (data.status === "success") {
         const sortedConsultations = data.consultations.sort(
           (a: ConsultationListItem, b: ConsultationListItem) =>
@@ -179,12 +222,12 @@ function App() {
           },
         ]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro na requisição de consultas:", error);
       setPatientConsultations([
         {
           id: Date.now().toString(),
-          title: `Erro de rede ao carregar consultas: ${error.message}`,
+          title: `Erro de rede ao carregar consultas: ${getErrorMessage(error, "Erro desconhecido")}`,
           date: new Date().toISOString(),
         },
       ]);
@@ -213,7 +256,7 @@ function App() {
         },
       ]);
     }
-  }, [patientId, consultationId]);
+  }, [patientId, consultationId, loadConsultationHistory]);
 
   // Carrega as consultas do paciente quando o patientId muda
   useEffect(() => {
@@ -222,7 +265,7 @@ function App() {
     } else {
       setPatientConsultations([]);
     }
-  }, [patientId]);
+  }, [patientId, fetchPatientConsultations]);
 
   // --- Handlers de Ação ---
 
@@ -240,17 +283,11 @@ function App() {
       setIsLoading(true);
 
       try {
-        const response = await fetch(`${SERVER_URL}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message: messageText,
-            patient_id: patientId,
-            consultation_id: consultationId,
-          }),
+        const data = await sendChatMessage({
+          message: messageText,
+          patient_id: patientId,
+          consultation_id: consultationId,
         });
-
-        const data = await response.json();
         if (data.status === "success") {
           if (patientId && consultationId) {
             await loadConsultationHistory(patientId, consultationId);
@@ -275,13 +312,13 @@ function App() {
             },
           ]);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro de rede:", error);
         setMessages((prevMessages) => [
           ...prevMessages,
           {
             id: Date.now(),
-            text: `Erro de conexão: ${error.message}`,
+            text: `Erro de conexão: ${getErrorMessage(error, "Erro desconhecido")}`,
             sender: "bot",
             timestamp: new Date().toISOString(),
           },
@@ -314,12 +351,7 @@ function App() {
       ]);
 
       try {
-        const response = await fetch(`${SERVER_URL}/api/upload-pdf`, {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await response.json();
+        const data = await uploadPdf(formData);
         if (data.status === "success") {
           if (patientId && consultationId) {
             await loadConsultationHistory(patientId, consultationId);
@@ -344,13 +376,13 @@ function App() {
             },
           ]);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro de rede no upload de PDF:", error);
         setMessages((prevMessages) => [
           ...prevMessages,
           {
             id: Date.now(),
-            text: `Erro de conexão ao enviar PDF: ${error.message}`,
+            text: `Erro de conexão ao enviar PDF: ${getErrorMessage(error, "Erro desconhecido")}`,
             sender: "bot",
             timestamp: new Date().toISOString(),
           },
@@ -369,12 +401,7 @@ function App() {
     }
     setIsLoading(true);
     try {
-      const response = await fetch(`${SERVER_URL}/api/patients`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newPatientName }),
-      });
-      const data = await response.json();
+      const data = await createPatient({ name: newPatientName });
 
       if (data.status === "success") {
         const newPId = data.patient_id;
@@ -408,9 +435,9 @@ function App() {
       } else {
         alert(`Erro ao criar paciente: ${data.message}`);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao criar paciente:", error);
-      alert(`Erro de rede ao criar paciente: ${error.message}`);
+      alert(`Erro de rede ao criar paciente: ${getErrorMessage(error, "Erro desconhecido")}`);
     } finally {
       setIsLoading(false);
     }
@@ -420,10 +447,7 @@ function App() {
     async (pId: string, pName: string) => {
       setIsLoading(true);
       try {
-        const consultationsResponse = await fetch(
-          `${SERVER_URL}/api/patients/${pId}/consultations`
-        );
-        const consultationsData = await consultationsResponse.json();
+        const consultationsData = await getPatientConsultations(pId);
 
         let selectedConsultationToLoad: string | null = null;
         let selectedConsultationTitleToLoad: string | null = null;
@@ -439,20 +463,11 @@ function App() {
           selectedConsultationToLoad = sortedConsults[0].id;
           selectedConsultationTitleToLoad = sortedConsults[0].title;
         } else {
-          const createConsultationResponse = await fetch(
-            `${SERVER_URL}/api/patients/${pId}/consultations`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
+          const createConsultationData = await createConsultation(pId, {
                 title: `Consulta Padrão - ${new Date().toLocaleDateString(
                   "pt-BR"
                 )}`,
-              }),
-            }
-          );
-          const createConsultationData =
-            await createConsultationResponse.json();
+          });
           if (createConsultationData.status === "success") {
             selectedConsultationToLoad = createConsultationData.consultation_id;
             selectedConsultationTitleToLoad =
@@ -493,13 +508,13 @@ function App() {
             }
           );
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro ao selecionar paciente:", error);
         setMessages((prev) => [
           ...prev,
           {
             id: Date.now(),
-            text: `Erro ao selecionar paciente: ${error.message}`,
+            text: `Erro ao selecionar paciente: ${getErrorMessage(error, "Erro desconhecido")}`,
             sender: "bot",
             timestamp: new Date().toISOString(),
           },
@@ -571,20 +586,10 @@ function App() {
       const newConsultationTitle = `Consulta em ${new Date().toLocaleDateString(
         "pt-BR"
       )} ${new Date().toLocaleTimeString("pt-BR")}`;
-      const response = await fetch(
-        `${SERVER_URL}/api/patients/${patientId}/consultations`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            title: newConsultationTitle,
-            import_consultation_ids: selectedConsultationIdsToImport,
-          }),
-        }
-      );
-      const data = await response.json();
+      const data = await createConsultation(patientId, {
+        title: newConsultationTitle,
+        import_consultation_ids: selectedConsultationIdsToImport,
+      });
 
       if (data.status === "success") {
         const newConsultId = data.consultation_id;
@@ -625,13 +630,13 @@ function App() {
           },
         ]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao criar nova consulta:", error);
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now(),
-          text: `Erro de rede ao criar nova consulta: ${error.message}`,
+          text: `Erro de rede ao criar nova consulta: ${getErrorMessage(error, "Erro desconhecido")}`,
           sender: "bot",
           timestamp: new Date().toISOString(),
         },
@@ -674,17 +679,11 @@ function App() {
       ]);
 
       try {
-        const response = await fetch(`${SERVER_URL}/api/extracted-data`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            patient_id: patientId,
-            consultation_id: consultationId,
-            extracted_data: extractedData,
-          }),
+        const data = await sendExtractedData({
+          patient_id: patientId,
+          consultation_id: consultationId,
+          extracted_data: extractedData,
         });
-
-        const data = await response.json();
         if (data.status === "success") {
           if (patientId && consultationId) {
             await loadConsultationHistory(patientId, consultationId);
@@ -700,13 +699,13 @@ function App() {
             },
           ]);
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error("Erro de rede ao enviar dados extraídos:", error);
         setMessages((prevMessages) => [
           ...prevMessages,
           {
             id: Date.now(),
-            text: `Erro de conexão ao enviar dados extraídos: ${error.message}`,
+            text: `Erro de conexão ao enviar dados extraídos: ${getErrorMessage(error, "Erro desconhecido")}`,
             sender: "bot",
             timestamp: new Date().toISOString(),
           },
@@ -790,13 +789,13 @@ function App() {
           },
         ]);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Erro ao extrair dados da página:", error);
       setMessages((prev) => [
         ...prev,
         {
           id: Date.now(),
-          text: `Erro ao extrair dados: ${error.message}`,
+          text: `Erro ao extrair dados: ${getErrorMessage(error, "Erro desconhecido")}`,
           sender: "bot",
           timestamp: new Date().toISOString(),
         },
@@ -817,8 +816,8 @@ function App() {
       setSelectorResult(
         result || "Nenhum elemento encontrado com este seletor."
       );
-    } catch (error: any) {
-      setSelectorResult(`Erro ao executar seletor: ${error.message}`);
+    } catch (error: unknown) {
+      setSelectorResult(`Erro ao executar seletor: ${getErrorMessage(error, "Erro desconhecido")}`);
     }
   }, [selectorInput]);
 
@@ -854,8 +853,7 @@ useEffect(() => {
 // --- EFEITO 2: CARREGAR HISTÓRICO DE TRANSCRIÇÕES ---
 useEffect(() => {
   if (patientId) {
-    fetch(`${SERVER_URL}/api/patients/${patientId}/transcription-log`)
-      .then(res => res.json())
+    getTranscriptionLog(patientId)
       .then(data => {
         if (data.status === 'success') {
           setTranscriptionLog(data.logs);
@@ -869,7 +867,7 @@ useEffect(() => {
 
 // --- EFEITO 3: CRONÔMETRO VISUAL (Atualiza a cada segundo) ---
 useEffect(() => {
-  let interval: any;
+  let interval: ReturnType<typeof setInterval> | undefined;
 
   if (isRecording && !isPaused) {
     interval = setInterval(() => {
@@ -879,7 +877,9 @@ useEffect(() => {
     }, 1000);
   }
 
-  return () => clearInterval(interval);
+  return () => {
+    if (interval !== undefined) clearInterval(interval);
+  };
 }, [isRecording, isPaused]);
 
 
@@ -965,14 +965,7 @@ const sendAudioToServer = useCallback(async (wavBlob: Blob, duration: number) =>
     form.append("consultation_id", consultationId);
     form.append("duration", duration.toString());
 
-    const resp = await fetch(`${SERVER_URL}/api/transcribe_audio`, {
-      method: "POST",
-      body: form,
-    });
-
-    if (!resp.ok) throw new Error(`Erro no servidor: ${resp.statusText}`);
-
-    const data = await resp.json();
+    const data = await sendAudioRequest(form);
 
     const invalidPhrases = [
         "Não foi possível entender o áudio",
@@ -1020,7 +1013,10 @@ const processAndSendAudio = useCallback(async (blob: Blob, duration: number) => 
   }
   try {
     const arrayBuffer = await blob.arrayBuffer();
-    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    const AudioCtx = window.AudioContext || (window as WindowWithWebkitAudio).webkitAudioContext;
+    if (!AudioCtx) {
+      throw new Error("AudioContext indisponível neste navegador.");
+    }
     const audioCtx = new AudioCtx();
     const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
     const wavBlob = audioBufferToWavBlob(decodedBuffer);
@@ -1107,10 +1103,11 @@ const startAudioRecording = useCallback(async () => {
         }
     }, 200);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Erro ao iniciar gravação:", error);
     let errorMessage = "Erro ao acessar o microfone.";
-    if (error.name === "NotAllowedError") errorMessage = "Permissão de microfone negada.";
+    const errorName = error instanceof Error ? error.name : "";
+    if (errorName === "NotAllowedError") errorMessage = "Permissão de microfone negada.";
     setMessages(prev => [...prev, { id: Date.now(), text: errorMessage, sender: "bot", timestamp: new Date().toISOString() }]);
   }
 }, [isProcessing, isRecording, isPaused, processAndSendAudio, consultationId]);
@@ -1180,6 +1177,21 @@ useEffect(() => {
       <header className="App-header">
         <h1>Copilot Médico</h1>
         <FirstAidIcon weight="fill" size={32} />
+        <button
+          onClick={onLogout}
+          style={{
+            marginLeft: "auto",
+            border: "1px solid #d9d9d9",
+            borderRadius: "6px",
+            padding: "6px 10px",
+            background: "#ffffff",
+            color: "#336B29",
+            cursor: "pointer",
+            fontWeight: 700,
+          }}
+        >
+          Sair
+        </button>
       </header>
 
       {/* Sidebar */}
@@ -1334,10 +1346,10 @@ useEffect(() => {
             <span style={{ fontSize: "24px" }}>📄</span>
             <div>
               <div style={{ color: "#fff", fontWeight: "bold", fontSize: "0.9em" }}>
-                Transcrição de {new Date(viewingLog.timestamp).toLocaleDateString()}
+                Transcrição de {new Date(viewingLog.timestamp || viewingLog.created_at || Date.now()).toLocaleDateString()}
               </div>
               <div style={{ color: "#aaa", fontSize: "0.8em" }}>
-                Horário: {new Date(viewingLog.timestamp).toLocaleTimeString()} • Duração: {viewingLog.duration}
+                Horário: {new Date(viewingLog.timestamp || viewingLog.created_at || Date.now()).toLocaleTimeString()} • Duração: {viewingLog.duration}
               </div>
             </div>
           </div>
@@ -1373,7 +1385,7 @@ useEffect(() => {
 
           {/* Verifica se é um log moderno com diarização */}
           {viewingLog.dialogue && Array.isArray(viewingLog.dialogue) ? (
-             viewingLog.dialogue.map((turn: any, idx: number) => (
+             viewingLog.dialogue.map((turn: TranscriptionDialogueTurn, idx: number) => (
                 <div key={idx} style={getBubbleStyle(turn.role_key || (turn.role === 'Médico' ? 'doctor' : 'patient'))}>
                    <div style={{
                       fontSize: "0.75em",
@@ -1501,11 +1513,11 @@ useEffect(() => {
                     <div style={{ fontSize: "2rem" }}>📄</div>
 
                     <div style={{ color: "#fff", fontWeight: "bold", fontSize: "0.85em" }}>
-                      {new Date(log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {new Date(log.timestamp || log.created_at || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
 
                     <div style={{ color: "#bbb", fontSize: "0.75em" }}>
-                      {new Date(log.timestamp).toLocaleDateString()}
+                      {new Date(log.timestamp || log.created_at || Date.now()).toLocaleDateString()}
                     </div>
 
                     <div style={{
@@ -1746,6 +1758,213 @@ useEffect(() => {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function App() {
+  const [session, setSession] = useState<ExtensionSession | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function validateStoredSession() {
+      try {
+        const storedSession = await getStoredSession();
+        if (!storedSession.token) {
+          if (!ignore) {
+            setSession(null);
+            setAuthChecked(true);
+          }
+          return;
+        }
+
+        const data = await getAuthenticatedUser();
+        const nextSession = {
+          token: storedSession.token,
+          user: data.user || storedSession.user,
+          profile: data.profile || storedSession.profile,
+        };
+        await storeSession(nextSession);
+        if (!ignore) {
+          setSession(nextSession);
+          setAuthChecked(true);
+        }
+      } catch {
+        await clearSession();
+        if (!ignore) {
+          setSession(null);
+          setAuthError("Sessão expirada. Entre novamente.");
+          setAuthChecked(true);
+        }
+      }
+    }
+
+    validateStoredSession();
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  async function handleLoginSuccess(nextSession: ExtensionSession) {
+    await storeSession(nextSession);
+    setAuthError("");
+    setSession(nextSession);
+  }
+
+  async function handleLogout() {
+    await clearSession();
+    chrome.storage.local.remove(["patientId", "patientName", "consultationId", "consultationTitle"]);
+    setSession(null);
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="App">
+        <header className="App-header">
+          <h1>Copilot Médico</h1>
+          <FirstAidIcon weight="fill" size={32} />
+        </header>
+        <div style={{ padding: "20px", textAlign: "center" }}>Validando sessão...</div>
+      </div>
+    );
+  }
+
+  if (!session?.token) {
+    return <ExtensionLogin error={authError} onLoginSuccess={handleLoginSuccess} />;
+  }
+
+  return <AuthenticatedApp onLogout={handleLogout} />;
+}
+
+function ExtensionLogin({
+  error: initialError,
+  onLoginSuccess,
+}: {
+  error: string;
+  onLoginSuccess: (session: ExtensionSession) => void;
+}) {
+  const [form, setForm] = useState({ email: "", password: "", profile: "medico" });
+  const [error, setError] = useState(initialError);
+  const [loading, setLoading] = useState(false);
+
+  function updateField(field: "email" | "password" | "profile") {
+    return (event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      setForm((current) => ({ ...current, [field]: event.target.value }));
+    };
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+
+    if (!form.email.trim() || !form.password || !form.profile) {
+      setError("Informe e-mail, senha e perfil.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const data = await loginRequest(form);
+      onLoginSuccess({
+        token: data.token,
+        user: data.user,
+        profile: data.profile,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Não foi possível entrar.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="App">
+      <header className="App-header">
+        <h1>Copilot Médico</h1>
+        <FirstAidIcon weight="fill" size={32} />
+      </header>
+
+      <form
+        onSubmit={handleSubmit}
+        style={{
+          display: "grid",
+          gap: "12px",
+          padding: "18px",
+          background: "#ffffff",
+        }}
+      >
+        <h2 style={{ margin: 0, color: "#336B29" }}>Entrar</h2>
+        {error && (
+          <div
+            style={{
+              padding: "10px",
+              borderRadius: "6px",
+              color: "#991b1b",
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+            }}
+          >
+            {error}
+          </div>
+        )}
+
+        <label style={{ display: "grid", gap: "6px", color: "#333", fontWeight: 700 }}>
+          E-mail
+          <input
+            type="email"
+            value={form.email}
+            onChange={updateField("email")}
+            placeholder="medico@clinica.com"
+            autoComplete="email"
+            style={{ minHeight: "40px", padding: "0 10px" }}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "6px", color: "#333", fontWeight: 700 }}>
+          Senha
+          <input
+            type="password"
+            value={form.password}
+            onChange={updateField("password")}
+            placeholder="Sua senha"
+            autoComplete="current-password"
+            style={{ minHeight: "40px", padding: "0 10px" }}
+          />
+        </label>
+
+        <label style={{ display: "grid", gap: "6px", color: "#333", fontWeight: 700 }}>
+          Perfil
+          <select
+            value={form.profile}
+            onChange={updateField("profile")}
+            style={{ minHeight: "40px", padding: "0 10px" }}
+          >
+            <option value="medico">Médico</option>
+            <option value="administrador">Administrador</option>
+          </select>
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            minHeight: "42px",
+            border: 0,
+            borderRadius: "6px",
+            background: "#336B29",
+            color: "#ffffff",
+            fontWeight: 800,
+            cursor: loading ? "not-allowed" : "pointer",
+            opacity: loading ? 0.75 : 1,
+          }}
+        >
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+      </form>
     </div>
   );
 }

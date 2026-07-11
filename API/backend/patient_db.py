@@ -6,6 +6,47 @@ from datetime import datetime
 # Define o caminho para o arquivo do banco de dados, garantindo que seja relativo ao diretório atual do script.
 DB_FILE = os.path.join(os.path.dirname(__file__), 'patients_db.json')
 
+def _now_iso():
+    return datetime.now().isoformat()
+
+def _empty_patient_record(patient_id, name=None, doctor_id=None, created_by=None):
+    return {
+        "id": patient_id,
+        "name": name if name else "Desconhecido",
+        "doctor_id": doctor_id,
+        "created_by": created_by,
+        "created_at": _now_iso(),
+        "consultations": [],
+        "chat_history": [],
+        "extension_data": [],
+        "transcription_log": [],
+    }
+
+def normalize_patient_record(patient_id, patient_data):
+    """
+    Garante que pacientes novos e legados tenham as chaves esperadas.
+    Pacientes antigos sem doctor_id continuam sem medico vinculado.
+    """
+    if not isinstance(patient_data, dict):
+        patient_data = {}
+
+    patient_data.setdefault("id", patient_id)
+    patient_data.setdefault("name", f"Paciente {patient_id[:8]}")
+    patient_data.setdefault("doctor_id", None)
+    patient_data.setdefault("created_by", None)
+    patient_data.setdefault("created_at", None)
+
+    if not isinstance(patient_data.get("consultations"), list):
+        patient_data["consultations"] = []
+    if not isinstance(patient_data.get("chat_history"), list):
+        patient_data["chat_history"] = []
+    if not isinstance(patient_data.get("extension_data"), list):
+        patient_data["extension_data"] = []
+    if not isinstance(patient_data.get("transcription_log"), list):
+        patient_data["transcription_log"] = []
+
+    return patient_data
+
 def load_database():
     """
     Carrega o banco de dados JSON do arquivo.
@@ -15,7 +56,13 @@ def load_database():
         return {}
     try:
         with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+            if not isinstance(data, dict):
+                return {}
+            return {
+                patient_id: normalize_patient_record(patient_id, patient_data)
+                for patient_id, patient_data in data.items()
+            }
     except (IOError, json.JSONDecodeError):
         # Em caso de erro de leitura ou JSON malformado, retorna um dicionário vazio
         # Isso evita que a aplicação trave, mas pode significar perda de dados se o arquivo estiver corrompido.
@@ -46,7 +93,7 @@ def get_patient_data(patient_id):
     db = load_database()
     return db.get(patient_id)
 
-def get_all_patients_info():
+def get_all_patients_info(doctor_id=None, include_unassigned=True):
     """
     Retorna uma lista de dicionários, cada um contendo o 'id' e o 'name'
     de todos os pacientes registrados no banco de dados.
@@ -54,14 +101,23 @@ def get_all_patients_info():
     db = load_database()
     patients_list = []
     for patient_id, patient_data in db.items():
+        patient_data = normalize_patient_record(patient_id, patient_data)
+        patient_doctor_id = patient_data.get("doctor_id")
+        if doctor_id is not None and patient_doctor_id != doctor_id:
+            continue
+        if doctor_id is None and not include_unassigned and patient_doctor_id is None:
+            continue
         patients_list.append({
             "id": patient_id,
             # Usa o nome do paciente ou um fallback se o nome não estiver disponível
-            "name": patient_data.get("name", f"Paciente {patient_id[:8]}") 
+            "name": patient_data.get("name", f"Paciente {patient_id[:8]}"),
+            "doctor_id": patient_doctor_id,
+            "created_by": patient_data.get("created_by"),
+            "created_at": patient_data.get("created_at"),
         })
     return patients_list
 
-def ensure_patient_exists(patient_id, name=None):
+def ensure_patient_exists(patient_id, name=None, doctor_id=None, created_by=None):
     """
     Verifica se um paciente com o given `patient_id` existe no banco de dados.
     Se não existir, uma nova entrada para o paciente é criada com o nome fornecido (ou "Desconhecido").
@@ -73,19 +129,29 @@ def ensure_patient_exists(patient_id, name=None):
 
     if not patient_data:
         # Paciente não existe, cria um novo
-        patient_data = {
-            "name": name if name else "Desconhecido",
-            "chat_history": [],  # Histórico geral do paciente (se ainda usado por alguma rota legacy)
-            "consultations": []  # Lista para armazenar consultas específicas do paciente
-        }
+        patient_data = _empty_patient_record(patient_id, name, doctor_id, created_by)
         db[patient_id] = patient_data
         save_database(db)
-    elif name and patient_data.get("name", "Desconhecido") == "Desconhecido":
-        # Atualiza o nome se um novo nome for fornecido e o atual for o fallback
+    else:
+        patient_data = normalize_patient_record(patient_id, patient_data)
+        changed = False
+        if doctor_id is not None and patient_data.get("doctor_id") is None:
+            patient_data["doctor_id"] = doctor_id
+            changed = True
+        if created_by is not None and patient_data.get("created_by") is None:
+            patient_data["created_by"] = created_by
+            changed = True
+        db[patient_id] = patient_data
+        if changed:
+            save_database(db)
+
+    if name and patient_data.get("name", "Desconhecido") == "Desconhecido":
         patient_data["name"] = name
+        db[patient_id] = patient_data
         save_database(db)
-        
+
     return db[patient_id]
+
 
 # Esta função parece ser um resquício de uma estrutura anterior onde o histórico era por paciente
 # Se o histórico de chat agora é por consulta, esta função pode ser depreciada ou removida se não for mais usada.

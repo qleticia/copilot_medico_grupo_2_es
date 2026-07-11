@@ -1,25 +1,31 @@
 import {
   BarChart3,
-  CalendarDays,
-  ClipboardList,
   LayoutDashboard,
   LogOut,
   Settings,
   Sparkles,
+  UserRound,
   UsersRound,
 } from 'lucide-react';
 
-const navItems = [
-  { id: 'dashboard', label: 'Início', icon: LayoutDashboard },
+const adminNavItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'medicos', label: 'Médicos', icon: UserRound },
   { id: 'pacientes', label: 'Pacientes', icon: UsersRound },
-  { id: 'agendamentos', label: 'Agenda', icon: CalendarDays },
+  { id: 'configuracoes', label: 'Configurações', icon: Settings },
+];
+
+const doctorNavItems = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'pacientes', label: 'Pacientes', icon: UsersRound },
   { id: 'analise', label: 'Consulta', icon: Sparkles },
-  { id: 'atendimentos', label: 'Atendimentos', icon: ClipboardList },
   { id: 'relatorios', label: 'Histórico', icon: BarChart3 },
-  { id: 'configuracoes', label: 'Ajustes', icon: Settings },
+  { id: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 
 function Layout({ activeView, onViewChange, onLogout, user, profile, pageTitle, children }) {
+  const navItems = profile?.name === 'administrador' ? adminNavItems : doctorNavItems;
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
