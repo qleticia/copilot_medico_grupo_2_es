@@ -1,42 +1,57 @@
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === 'SEND_COMBINED_DATA') {
-    
-    // 1. lê o id do paciente do armazenamento antes de fazer a requisição.
-    chrome.storage.local.get(['copilotMedicoPatientId'], (storageResult) => {
-      const currentPatientId = storageResult.copilotMedicoPatientId; // Pode ser undefined se for a primeira vez.
-      console.log(`ID de Paciente recuperado do armazenamento: ${currentPatientId}`);
+    chrome.storage.local.get(
+      ['patientId', 'consultationId', 'copilotMedicoPatientId', 'copmed_extension_token'],
+      (storageResult) => {
+        const legacyPatientId = storageResult.copilotMedicoPatientId;
+        const currentPatientId = storageResult.patientId || legacyPatientId;
+        const currentConsultationId = storageResult.consultationId || null;
+        const token = storageResult.copmed_extension_token;
 
-      const payload = {
-        // 2. inclui id na requisição, se ele existir.
-        patient_id: currentPatientId, 
-        extracted_content: request.extracted_content
-      };
-
-      console.log('Enviando dados para o servidor Python:', payload);
-
-      fetch('http://localhost:3001/api/extracted-data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Resposta do servidor Python:', data);
-
-        // 3. salva o novo ID se o servidor tiver criado
-        if (data.patient_id && data.patient_id !== currentPatientId) {
-          console.log(`Novo ID de paciente recebido do servidor: ${data.patient_id}. Salvando...`);
-          chrome.storage.local.set({ copilotMedicoPatientId: data.patient_id });
+        if (!currentPatientId) {
+          const errorMessage = 'patientId nao encontrado no armazenamento. Selecione um paciente e tente novamente.';
+          console.error(errorMessage);
+          sendResponse({ status: 'error', message: errorMessage });
+          return;
         }
-        
-        // Retorna a resposta completa para o content.js
-        sendResponse(data); 
-      })
-      .catch(error => {
-        console.error('Erro no fetch para o Python:', error);
-        sendResponse({ status: 'erro', error: error.message });
-      });
-    });
+
+        const sourceUrl = request.source_url || sender?.tab?.url || null;
+        const payload = {
+          patient_id: currentPatientId,
+          consultation_id: currentConsultationId,
+          source_url: sourceUrl,
+          extracted_content: request.extracted_content,
+        };
+
+        const headers = {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+
+        fetch('http://localhost:3001/api/extension/extracted-data', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        })
+          .then((response) => response.json())
+          .then((data) => {
+            console.log('Resposta do servidor:', data);
+
+            if (data.patient_id && data.patient_id !== currentPatientId) {
+              chrome.storage.local.set({ patientId: data.patient_id });
+            }
+            if (data.consultation_id && data.consultation_id !== currentConsultationId) {
+              chrome.storage.local.set({ consultationId: data.consultation_id });
+            }
+
+            sendResponse(data);
+          })
+          .catch((error) => {
+            console.error('Erro no fetch para a API:', error);
+            sendResponse({ status: 'error', message: error.message });
+          });
+      }
+    );
 
     return true; // manter a comunicação aberta para a resposta assíncrona.
   }

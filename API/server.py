@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime
 
-from flask import Flask, request, jsonify
+from flask import Flask, g, request, jsonify
 from flask_cors import CORS
 import tempfile
 import speech_recognition as sr
@@ -13,6 +13,24 @@ import speech_recognition as sr
 from backend import gemini_connection
 from backend import pdf_reader
 from backend import text_filter
+from backend.auth_decorators import roles_required, token_required
+from backend.auth_service import (
+    AuthError,
+    authenticate_user,
+    approve_doctor_request,
+    create_access_token,
+    create_doctor_registration,
+    get_profile_details,
+    is_valid_email,
+    list_doctor_requests,
+    normalize_email,
+    normalize_profile,
+    normalize_profiles,
+    reject_doctor_request,
+    sanitize_user,
+    validate_user_profile_access,
+)
+from backend.config import settings
 
 # Importa TODAS as funções do seu patient_db.py
 from backend.patient_db import (
@@ -20,12 +38,27 @@ from backend.patient_db import (
     get_all_patients_info, ensure_patient_exists, get_patient_chat_history, 
     add_message_to_history, add_consultation_to_patient, get_patient_consultations, 
     get_consultation_chat_history, add_message_to_consultation_history, add_transcription_log_to_patient,
-    get_patient_transcription_log
+    get_patient_transcription_log, add_extension_data_to_patient, get_patient_extension_data,
+    consultation_belongs_to_patient
     )
 from backend.processador_voz.processador_voz import TranscritorVoz
 from backend.audio_service import Diarizador
+
+
+def get_cors_origins():
+    configured_origins = settings.cors_origins.strip()
+    if not configured_origins or configured_origins == "*":
+        return "*"
+    return [origin.strip() for origin in configured_origins.split(",") if origin.strip()]
+
+
 app = Flask(__name__)
-CORS(app)
+CORS(
+    app,
+    resources={r"/api/*": {"origins": get_cors_origins()}},
+    allow_headers=["Content-Type", "Authorization"],
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
 
 audio_processor = None
 
@@ -54,7 +87,275 @@ except Exception as e:
     audio_processor = None
 
 
+def _json_error(message, status_code):
+    return jsonify({"status": "error", "message": message}), status_code
+
+
+def current_user_is_admin():
+    return getattr(g, "current_profile", "") == "administrador"
+
+
+def current_user_is_doctor():
+    return getattr(g, "current_profile", "") == "medico"
+
+
+def patient_belongs_to_current_user(patient_id):
+    patient_data = get_patient_data(patient_id)
+    if not patient_data:
+        return False
+    if current_user_is_admin():
+        return True
+    if current_user_is_doctor():
+        return patient_data.get("doctor_id") == g.current_user.get("id")
+    return False
+
+
+def require_patient_access(patient_id):
+    patient_data = get_patient_data(patient_id)
+    if not patient_data:
+        return None, _json_error("Paciente nao encontrado.", 404)
+    if not patient_belongs_to_current_user(patient_id):
+        return None, _json_error("Acesso negado ao paciente.", 403)
+    return patient_data, None
+
+
+def _patient_owner_for_new_record(data=None):
+    if current_user_is_doctor():
+        return g.current_user.get("id")
+    if not isinstance(data, dict):
+        return None
+    doctor_id = data.get("doctor_id") or data.get("doctorId")
+    return doctor_id.strip() if isinstance(doctor_id, str) and doctor_id.strip() else None
+
+
+def _payload_value(data, *names):
+    for name in names:
+        if name in data:
+            return data.get(name)
+    return None
+
+
+def _optional_text(value):
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _normalize_extension_content(raw_content):
+    if isinstance(raw_content, list):
+        if not raw_content:
+            return None, "extracted_content deve ser uma lista nao vazia."
+        for index, item in enumerate(raw_content):
+            if not isinstance(item, dict):
+                return None, f"extracted_content[{index}] deve ser um objeto."
+            role = item.get("role")
+            text = item.get("text")
+            if not isinstance(role, str) or not role.strip():
+                return None, f"extracted_content[{index}].role e obrigatorio."
+            if not isinstance(text, str) or not text.strip():
+                return None, f"extracted_content[{index}].text e obrigatorio."
+        return raw_content, None
+
+    if isinstance(raw_content, dict) and raw_content:
+        return raw_content, None
+
+    if isinstance(raw_content, str) and raw_content.strip():
+        return raw_content.strip(), None
+
+    return None, "extracted_content deve ser uma lista nao vazia, objeto nao vazio ou texto."
+
+
+def _normalize_transcriptions_for_extension_response(logs):
+    normalized = []
+    for log in logs:
+        item = dict(log)
+        item.setdefault("source", "extension")
+        item.setdefault("type", "transcription")
+        item.setdefault("created_at", item.get("timestamp"))
+        item.setdefault("audio", {"persisted": False})
+        normalized.append(item)
+    return normalized
+
+
+def _auth_success_response(user, profile, token, expires_in):
+    return jsonify({
+        "status": "success",
+        "token": token,
+        "token_type": "Bearer",
+        "expires_in": expires_in,
+        "user": sanitize_user(user),
+        "profile": get_profile_details(profile),
+        "available_profiles": [
+            get_profile_details(user_profile)
+            for user_profile in normalize_profiles(user.get("profiles"))
+        ],
+    }), 200
+
+
+def _format_extension_extracted_data(extracted_content, source_url=None):
+    lines = ["Dados capturados da extensao Chrome"]
+
+    if source_url:
+        lines.extend(["", f"Fonte: {source_url}"])
+
+    lines.append("")
+    if isinstance(extracted_content, list):
+        for item in extracted_content:
+            lines.append(f"{item['role'].strip()}: {item['text'].strip()}")
+    elif isinstance(extracted_content, dict):
+        for key, value in extracted_content.items():
+            if isinstance(value, list):
+                value = ", ".join(str(item) for item in value)
+            lines.append(f"{key}: {value}")
+    else:
+        lines.append(str(extracted_content))
+
+    return "\n".join(lines)
+
+
+@app.route('/api/auth/login', methods=['POST'])
+def login():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    email = normalize_email(data.get("email"))
+    password = data.get("password")
+    requested_profile = normalize_profile(data.get("profile"))
+
+    if not email or password is None:
+        return _json_error("Email e senha sao obrigatorios.", 400)
+    if not is_valid_email(email):
+        return _json_error("Email invalido.", 400)
+    if not isinstance(password, str) or not password:
+        return _json_error("Senha obrigatoria.", 400)
+    if not requested_profile:
+        return _json_error("Perfil e obrigatorio.", 400)
+
+    user = authenticate_user(email, password, require_active=False)
+    if not user:
+        return _json_error("Email ou senha invalidos", 401)
+
+    profiles = normalize_profiles(user.get("profiles"))
+    if not profiles:
+        return _json_error("Usuario sem perfil de acesso.", 403)
+
+    try:
+        validate_user_profile_access(user, requested_profile)
+        token, expires_in = create_access_token(user, requested_profile)
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+
+    return _auth_success_response(user, requested_profile, token, expires_in)
+
+
+@app.route('/api/auth/register-doctor', methods=['POST'])
+def register_doctor():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    try:
+        doctor = create_doctor_registration(
+            name=data.get("name"),
+            email=data.get("email"),
+            password=data.get("password"),
+            crm=data.get("crm"),
+            specialty=data.get("specialty"),
+        )
+    except ValueError as exc:
+        message = str(exc)
+        status_code = 409 if "existe" in message else 400
+        return _json_error(message, status_code)
+
+    return jsonify({
+        "status": "success",
+        "message": "Cadastro enviado para aprovação do administrador.",
+        "user": sanitize_user(doctor),
+    }), 201
+
+
+@app.route('/api/auth/select-profile', methods=['POST'])
+@token_required
+def select_profile():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+
+    selected_profile = normalize_profile(data.get("profile"))
+    if not selected_profile:
+        return _json_error("Perfil e obrigatorio.", 400)
+    if selected_profile not in normalize_profiles(g.current_user.get("profiles")):
+        return _json_error("Perfil nao permitido para este usuario.", 403)
+
+    try:
+        token, expires_in = create_access_token(g.current_user, selected_profile)
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+
+    return _auth_success_response(g.current_user, selected_profile, token, expires_in)
+
+
+@app.route('/api/auth/me', methods=['GET'])
+@token_required
+def get_authenticated_user():
+    profile = getattr(g, "current_profile", "")
+    return jsonify({
+        "status": "success",
+        "user": getattr(g, "current_user_safe", {}),
+        "profile": get_profile_details(profile),
+        "available_profiles": [
+            get_profile_details(user_profile)
+            for user_profile in normalize_profiles(g.current_user.get("profiles"))
+        ],
+    }), 200
+
+
+@app.route('/api/admin/doctor-requests', methods=['GET'])
+@roles_required("administrador")
+def get_doctor_requests_api():
+    status = request.args.get("status", "pending")
+    if status not in {"pending", "approved", "rejected", "all"}:
+        return _json_error("Status invalido.", 400)
+    return jsonify({
+        "status": "success",
+        "requests": list_doctor_requests(status),
+    }), 200
+
+
+@app.route('/api/admin/doctor-requests/<user_id>/approve', methods=['PATCH'])
+@roles_required("administrador")
+def approve_doctor_request_api(user_id):
+    try:
+        doctor = approve_doctor_request(user_id, g.current_user.get("id"))
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+    return jsonify({
+        "status": "success",
+        "message": "Medico aprovado com sucesso.",
+        "doctor": doctor,
+    }), 200
+
+
+@app.route('/api/admin/doctor-requests/<user_id>/reject', methods=['PATCH'])
+@roles_required("administrador")
+def reject_doctor_request_api(user_id):
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return _json_error("Corpo JSON invalido.", 400)
+    try:
+        doctor = reject_doctor_request(user_id, g.current_user.get("id"), data.get("reason"))
+    except AuthError as exc:
+        return _json_error(exc.message, exc.status_code)
+    return jsonify({
+        "status": "success",
+        "message": "Medico rejeitado.",
+        "doctor": doctor,
+    }), 200
+
+
 @app.route('/api/transcribe_audio', methods=['POST'])
+@roles_required("administrador", "medico")
 def transcribe_audio_route():
     """
     Recebe áudio, faz Diarização (se disponível) ou Transcrição simples,
@@ -67,15 +368,25 @@ def transcribe_audio_route():
             return jsonify({"status": "error", "message": "Nenhum arquivo enviado."}), 400
 
         audio_file = request.files['audio_file']
-        patient_id = request.form.get('patient_id')
-        consultation_id = request.form.get('consultation_id')
+        patient_id = request.form.get('patient_id') or request.form.get('patientId')
+        consultation_id = request.form.get('consultation_id') or request.form.get('consultationId')
         # Duração estimada vinda do front (pode ser 0)
         duration_input = request.form.get('duration', 0.0, type=float)
 
-        if not patient_id or not consultation_id:
+        patient_id = patient_id.strip() if isinstance(patient_id, str) else None
+        consultation_id = consultation_id.strip() if isinstance(consultation_id, str) and consultation_id.strip() else None
+
+        if not patient_id:
             return jsonify({"status": "error", "message": "IDs obrigatórios."}), 400
 
         # 2. Salvar arquivo temporário
+        patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+            return jsonify({"status": "error", "message": "Consulta nao encontrada para este paciente."}), 404
+
         file_ext = '.wav'
         if audio_file.filename and '.' in audio_file.filename:
             file_ext = '.' + audio_file.filename.split('.')[-1]
@@ -148,6 +459,12 @@ def transcribe_audio_route():
             consultation_id=consultation_id,
             text=texto_final,
             duration_seconds=final_duration if final_duration > 0 else 1.0,
+            source=request.form.get('source') or "extension",
+            audio_metadata={
+                "persisted": False,
+                "filename": audio_file.filename,
+                "content_type": audio_file.content_type,
+            },
             dialogue=dialogue_structure  # <--- O PULO DO GATO ESTÁ AQUI
         )
 
@@ -171,8 +488,12 @@ def transcribe_audio_route():
 
 # Rota para obter EXCLUSIVAMENTE o histórico de transcrições de áudio
 @app.route('/api/patients/<patient_id>/transcription-log', methods=['GET'])
+@roles_required("administrador", "medico")
 def get_transcription_log_api(patient_id):
     try:
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
         logs = get_patient_transcription_log(patient_id) # Função do seu patient_db
         return jsonify({
             "status": "success",
@@ -185,6 +506,7 @@ def get_transcription_log_api(patient_id):
 
 # NOVO ENDPOINT: Verificar existência do Patient ID
 @app.route('/api/patient-exists/<patient_id>', methods=['GET'])
+@roles_required("administrador", "medico")
 def check_patient_exists_api(patient_id):
     """
     Verifica se um paciente com o ID fornecido existe no banco de dados.
@@ -193,6 +515,8 @@ def check_patient_exists_api(patient_id):
     try:
         patient_data = get_patient_data(patient_id) 
         exists = patient_data is not None
+        if exists and not patient_belongs_to_current_user(patient_id):
+            return _json_error("Acesso negado ao paciente.", 403)
         return jsonify({"status": "success", "exists": exists}), 200
     except Exception as e:
         import traceback
@@ -201,17 +525,26 @@ def check_patient_exists_api(patient_id):
 
 # NOVO ENDPOINT: Criar Paciente
 @app.route('/api/patients', methods=['POST'])
+@roles_required("administrador", "medico")
 def create_patient():
     """
     Cria um novo paciente e retorna seu ID e nome.
     Espera um JSON com 'name' (opcional).
     """
     try:
-        data = request.json
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return _json_error("Corpo JSON invalido.", 400)
         patient_name = data.get('name')
+        doctor_id = _patient_owner_for_new_record(data)
 
         new_patient_id = generate_patient_id()
-        patient_data = ensure_patient_exists(new_patient_id, name=patient_name)
+        patient_data = ensure_patient_exists(
+            new_patient_id,
+            name=patient_name,
+            doctor_id=doctor_id,
+            created_by=g.current_user.get("id"),
+        )
         
         # Adiciona a primeira "consulta" padrão ao criar o paciente
         first_consultation_id = add_consultation_to_patient(new_patient_id, "Primeira Consulta")
@@ -220,6 +553,7 @@ def create_patient():
             "status": "success",
             "patient_id": new_patient_id,
             "patient_name": patient_data.get("name", "Desconhecido"),
+            "doctor_id": patient_data.get("doctor_id"),
             "first_consultation_id": first_consultation_id
         }), 201 # 201 Created
 
@@ -231,9 +565,10 @@ def create_patient():
 
 # Endpoint do Chat para usar o histórico da consulta selecionada
 @app.route('/api/chat', methods=['POST'])
+@roles_required("administrador", "medico")
 def handle_chat_message():
     try:
-        data = request.json
+        data = request.get_json(silent=True)
         if not data or 'message' not in data:
             return jsonify({"status": "error", "message": "Requisição inválida."}), 400
 
@@ -246,10 +581,20 @@ def handle_chat_message():
         if not patient_id: # Se não tem patient_id, cria um novo
             patient_id = generate_patient_id()
             new_patient_id_generated = patient_id
-            ensure_patient_exists(patient_id, name="Desconhecido")
+            ensure_patient_exists(
+                patient_id,
+                name="Desconhecido",
+                doctor_id=_patient_owner_for_new_record(data),
+                created_by=g.current_user.get("id"),
+            )
             # Não é necessário load_database() aqui, pois ensure_patient_exists já salva.
 
         # Se não tem consultation_id, ou se o paciente é novo, cria uma primeira consulta
+        if patient_id and not new_patient_id_generated:
+            _patient_data, access_error = require_patient_access(patient_id)
+            if access_error:
+                return access_error
+
         if not consultation_id:
             patient_consultations = get_patient_consultations(patient_id)
             if patient_consultations:
@@ -259,6 +604,9 @@ def handle_chat_message():
                 consultation_id = add_consultation_to_patient(patient_id, "Consulta Inicial (Chat)")
                 if not consultation_id:
                     raise Exception("Falha ao criar consulta para o paciente.")
+
+        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+            return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         print(f"\nMensagem recebida para Paciente ID {patient_id}, Consulta ID {consultation_id}: {user_message}")
 
@@ -290,8 +638,111 @@ def handle_chat_message():
         return jsonify({"status": "error", "message": f"Erro interno do servidor: {e}"}), 500
 
 
+def _handle_extension_extracted_data_request():
+    try:
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _json_error("Corpo JSON invalido.", 400)
+
+        patient_id = _payload_value(data, "patient_id", "patientId")
+        consultation_id = _payload_value(data, "consultation_id", "consultationId")
+        source_url = _payload_value(data, "source_url", "sourceUrl")
+        created_at = _payload_value(data, "created_at", "createdAt")
+        raw_content = _payload_value(data, "extracted_content", "extractedData", "extracted_data")
+
+        if not isinstance(patient_id, str) or not patient_id.strip():
+            return _json_error("patient_id e obrigatorio.", 400)
+        if source_url is not None and not isinstance(source_url, str):
+            return _json_error("source_url deve ser texto.", 400)
+        if created_at is not None and not isinstance(created_at, str):
+            return _json_error("created_at deve ser texto.", 400)
+
+        extracted_content, content_error = _normalize_extension_content(raw_content)
+        if content_error:
+            return _json_error(content_error, 400)
+
+        patient_id = patient_id.strip()
+        consultation_id = _optional_text(consultation_id)
+        source_url = _optional_text(source_url)
+        created_at = _optional_text(created_at)
+
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        if consultation_id and not consultation_belongs_to_patient(patient_id, consultation_id):
+            return _json_error("Consulta nao encontrada.", 404)
+
+        extension_entry = add_extension_data_to_patient(
+            patient_id=patient_id,
+            consultation_id=consultation_id,
+            source_url=source_url,
+            content=extracted_content,
+            created_at=created_at,
+        )
+        if not extension_entry:
+            return _json_error("Falha ao salvar dados da extensao.", 500)
+
+        ai_response_text = None
+        if consultation_id:
+            formatted_text = _format_extension_extracted_data(extracted_content, source_url)
+            filtered_text = text_filter.remover_nomes(formatted_text) or formatted_text
+
+            add_message_to_consultation_history(patient_id, consultation_id, "user", filtered_text)
+            ai_response_text = gemini_connection.send_message(patient_id, consultation_id, filtered_text)
+            add_message_to_consultation_history(patient_id, consultation_id, "model", ai_response_text)
+
+        return jsonify({
+            "status": "success",
+            "ai_response": ai_response_text,
+            "patient_id": patient_id,
+            "consultation_id": consultation_id,
+            "extension_data": extension_entry
+        }), 200
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro interno ao processar dados da extensao: {e}"}), 500
+
+
+@app.route('/api/extension/extracted-data', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_extension_extracted_data():
+    return _handle_extension_extracted_data_request()
+
+
+@app.route('/api/extracted-data', methods=['POST'])
+@roles_required("administrador", "medico")
+def handle_legacy_extracted_data():
+    return _handle_extension_extracted_data_request()
+
+
+@app.route('/api/patients/<patient_id>/extension-data', methods=['GET'])
+@roles_required("administrador", "medico")
+def get_patient_extension_data_api(patient_id):
+    try:
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+
+        return jsonify({
+            "status": "success",
+            "patient_id": patient_id,
+            "extension_data": get_patient_extension_data(patient_id),
+            "transcriptions": _normalize_transcriptions_for_extension_response(
+                get_patient_transcription_log(patient_id)
+            )
+        }), 200
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"status": "error", "message": f"Erro ao recuperar dados da extensao: {e}"}), 500
+
+
 # Endpoint de Upload de PDF
 @app.route('/api/upload-pdf', methods=['POST'])
+@roles_required("administrador", "medico")
 def upload_pdf():
     try:
         if 'pdf' not in request.files:
@@ -306,7 +757,15 @@ def upload_pdf():
         if not patient_id:
             patient_id = generate_patient_id()
             new_patient_id_generated = patient_id
-            ensure_patient_exists(patient_id)
+            ensure_patient_exists(
+                patient_id,
+                doctor_id=_patient_owner_for_new_record({}),
+                created_by=g.current_user.get("id"),
+            )
+        else:
+            _patient_data, access_error = require_patient_access(patient_id)
+            if access_error:
+                return access_error
         
         # Assegura que há uma consultation_id
         if not consultation_id:
@@ -317,6 +776,8 @@ def upload_pdf():
                 consultation_id = add_consultation_to_patient(patient_id, "Consulta de PDF")
                 if not consultation_id:
                     raise Exception("Falha ao criar consulta para o paciente durante upload de PDF.")
+        elif not consultation_belongs_to_patient(patient_id, consultation_id):
+            return _json_error("Consulta nao encontrada para este paciente.", 404)
 
         extracted_text = pdf_reader.extract_text_from_pdf(file)
         if not extracted_text.strip():
@@ -354,11 +815,18 @@ def upload_pdf():
 
 ## Rota `/api/patients/<patient_id>/consultations` para gerenciar consultas
 @app.route('/api/patients/<patient_id>/consultations', methods=['GET', 'POST'])
+@roles_required("administrador", "medico")
 def handle_patient_consultations(patient_id):
+    _patient_data, access_error = require_patient_access(patient_id)
+    if access_error:
+        return access_error
+
     if request.method == 'POST':
         # Lógica para CRIAR uma nova consulta
         try:
-            data = request.get_json()
+            data = request.get_json(silent=True) or {}
+            if not isinstance(data, dict):
+                return _json_error("Corpo JSON invalido.", 400)
             consultation_title = data.get('title')
             import_consultation_ids = data.get('import_consultation_ids', [])
 
@@ -419,11 +887,17 @@ def handle_patient_consultations(patient_id):
         
 # NOVO ENDPOINT: Obter Histórico de uma Consulta Específica
 @app.route('/api/patients/<patient_id>/consultations/<consultation_id>/history', methods=['GET'])
+@roles_required("administrador", "medico")
 def get_consultation_history_api(patient_id, consultation_id):
     """
     Retorna o histórico de chat de uma consulta específica.
     """
     try:
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+        if not consultation_belongs_to_patient(patient_id, consultation_id):
+            return _json_error("Consulta nao encontrada para este paciente.", 404)
         history = get_consultation_chat_history(patient_id, consultation_id)
         if history is not None:
             return jsonify({"status": "success", "history": history}), 200
@@ -435,12 +909,19 @@ def get_consultation_history_api(patient_id, consultation_id):
         return jsonify({"status": "error", "message": f"Erro ao recuperar histórico da consulta: {e}"}), 500
     
 @app.route('/api/all-patients', methods=['GET'])
+@roles_required("administrador", "medico")
 def get_all_patients():
     """
     Retorna uma lista de todos os pacientes (ID e Nome) para o frontend.
     """
     try:
-        patients_info = get_all_patients_info()
+        if current_user_is_admin():
+            patients_info = get_all_patients_info()
+        else:
+            patients_info = get_all_patients_info(
+                doctor_id=g.current_user.get("id"),
+                include_unassigned=False,
+            )
         return jsonify({"status": "success", "patients": patients_info}), 200
     except Exception as e:
         import traceback
@@ -448,6 +929,7 @@ def get_all_patients():
         return jsonify({"status": "error", "message": f"Erro ao obter lista de pacientes: {e}"}), 500
 
 @app.route('/api/recommendations', methods=['POST'])
+@roles_required("administrador", "medico")
 def handle_recommendations():
     """
     Endpoint para solicitação de recomendações com base no andamento/histórico da consulta.
@@ -468,6 +950,12 @@ def handle_recommendations():
             return jsonify({"error": "paciente_id e consulta_id não encontrados."}), 400
 
         # Define o caminho para o arquivo do prompt de recomendações
+        _patient_data, access_error = require_patient_access(patient_id)
+        if access_error:
+            return access_error
+        if not consultation_belongs_to_patient(patient_id, consultation_id):
+            return _json_error("Consulta nao encontrada para este paciente.", 404)
+
         prompt_file_path = os.path.join(os.path.dirname(__file__), 'recommendations.txt')
 
         # Verifica se o arquivo existe
